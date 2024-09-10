@@ -1,14 +1,21 @@
 mod user;
 mod main_select;
 mod friend;
+mod datetime;
 
 use clap::{Parser, Subcommand};
 use reqwest;
 use serde::Deserialize;
 
+// 分隔符
+pub(crate) const DELIMITER: &str = "-----------------------------------------------";
+
+pub(crate) fn delimiter() {
+    println!("{DELIMITER}");
+}
+
 pub const HOST: &str = "http://localhost:3000";
 fn main() {
-    // cli()
     let cli = Cli::parse();
     match cli.command {
         Commands::Register { name, password } => user::register(name, password),

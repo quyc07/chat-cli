@@ -1,4 +1,4 @@
-use crate::{main_select, HOST};
+use crate::{delimiter, main_select, HOST};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::cell::RefCell;
@@ -63,6 +63,7 @@ pub(crate) fn login(name: String, password: String) {
                 match res.json::<Login>() {
                     Ok(Login { msg: _, data, code: _ }) => {
                         println!("登陆成功");
+                        delimiter();
                         Some(data.access_token)
                     }
                     Err(e) => {

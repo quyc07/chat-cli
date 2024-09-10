@@ -1,22 +1,24 @@
-use crate::main_select::MainSelect::{AddFriend, ChatInGroups, ChatWithFriends};
+use crate::main_select::MainSelect::{AddFriend, ChatHistory, ChatInGroups, ChatWithFriends};
+use crate::user::TOKEN;
 use crate::{friend, HOST};
 use serde::Deserialize;
-use crate::user::TOKEN;
 
 pub(crate) enum MainSelect {
     AddFriend,
+    ChatHistory,
     ChatWithFriends,
     ChatInGroups,
 }
 
 
 fn main_selects() -> Vec<&'static str> {
-    vec![AddFriend.to_str(), ChatWithFriends.to_str(), ChatInGroups.to_str()]
+    vec![AddFriend.to_str(), ChatHistory.to_str(), ChatWithFriends.to_str(), ChatInGroups.to_str()]
 }
 impl MainSelect {
-    fn to_str(&self) -> &str {
+    pub(crate) fn to_str(&self) -> &str {
         match self {
             AddFriend => "添加好友",
+            ChatHistory => "聊天列表",
             ChatWithFriends => "好友列表",
             ChatInGroups => "群聊列表",
         }
@@ -26,6 +28,7 @@ impl MainSelect {
     fn from_str(s: &str) -> Self {
         match s {
             "添加好友" => AddFriend,
+            "聊天列表" => ChatHistory,
             "好友列表" => ChatWithFriends,
             "群聊列表" => ChatInGroups,
             _ => panic!("Invalid string"),
@@ -34,7 +37,7 @@ impl MainSelect {
     pub(crate) fn select() {
         let options = main_selects();
         let selection = dialoguer::Select::new()
-            .with_prompt("请选择：")
+            .with_prompt("请选择")
             .items(&options)
             .interact()
             .unwrap();
@@ -45,10 +48,15 @@ impl MainSelect {
     fn do_select(&self) {
         match self {
             AddFriend => add_friend(),
+            ChatHistory => chat_history(),
             ChatWithFriends => chat_with_friends(),
             ChatInGroups => chat_in_groups(),
         }
     }
+}
+
+fn chat_history() {
+    todo!()
 }
 
 fn chat_in_groups() {
