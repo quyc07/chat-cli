@@ -1,15 +1,14 @@
 use clap::{Arg, Command, Parser, Subcommand};
 use reqwest;
+use reqwest::StatusCode;
 use serde::Deserialize;
 
-const HOST:&str = "http://localhost:3000";
+const HOST: &str = "http://localhost:3000";
 fn main() {
     // cli()
     let cli = Cli::parse();
     match cli.command {
-        Commands::Register { name, password } => {
-            register(name, password)
-        }
+        Commands::Register { name, password } => register(name, password),
         Commands::Login { name, password } => {
             println!("Logging in user {} with password {}", name, password);
         }
@@ -29,13 +28,21 @@ fn register(name: String, password: String) {
         .send();
     match res {
         Ok(res) => {
-            if res.status().is_success() {
-                println!("恭喜{name}注册成功，请登陆场聊吧！")
-            } else {
-                println!("Register failed: HTTP {}", res.status());
+            match res.status() {
+                StatusCode::OK => {
+                    println!("恭喜{name}注册成功，请登陆场聊吧！")
+                }
+                StatusCode::CONFLICT => {
+                    println!("用户名已存在，请重新注册")
+                }
+                _ => {
+                    println!("注册失败: {}", res.json::<RegisterRes>().unwrap().msg)
+                }
             }
         }
-        Err(err) => {println!("注册失败: {}", err)}
+        Err(err) => {
+            println!("注册失败: {}", err)
+        }
     }
 }
 
@@ -77,11 +84,10 @@ enum Commands {
 /// 校验用户名
 /// 用户名必须是纯英文
 fn check_name(name: &str) -> Result<String, String> {
-    // name 必须是纯英文
-    if !name.chars().all(|c| c.is_ascii_alphabetic()) {
-        return Err("用户名必须为英文".to_string());
+    // name 必须是纯英文或英文与数字的组合
+    if !name.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("用户名必须为英文或英文与数字的组合".to_string());
     }
-    // TODO 检查数据库中是否存在该用户名
     Ok(name.to_string())
 }
 
@@ -192,7 +198,11 @@ fn cli() {
             Ok(res) => {
                 if res.status().is_success() {
                     match res.json::<FriendsRes>() {
-                        Ok(FriendsRes { msg: _, data, code: _ }) => Some(data),
+                        Ok(FriendsRes {
+                               msg: _,
+                               data,
+                               code: _,
+                           }) => Some(data),
                         Err(e) => {
                             println!("Failed to read response: {}", e);
                             None
