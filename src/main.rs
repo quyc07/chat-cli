@@ -1,10 +1,103 @@
-fn main() {
-    cli()
-}
-
-use clap::{Arg, Command};
+use clap::{Arg, Command, Parser, Subcommand};
 use reqwest;
 use serde::Deserialize;
+
+const HOST:&str = "http://localhost:3000";
+fn main() {
+    // cli()
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Register { name, password } => {
+            register(name, password)
+        }
+        Commands::Login { name, password } => {
+            println!("Logging in user {} with password {}", name, password);
+        }
+    }
+}
+
+fn register(name: String, password: String) {
+    // 使用reqwest 向 POST HOST/user/register 接口注册用户
+    let url = format!("{HOST}/user/register");
+    let client = reqwest::blocking::Client::new();
+    let res = client
+        .post(&url)
+        .json(&serde_json::json!({
+            "name": name,
+            "password": password
+        }))
+        .send();
+    match res {
+        Ok(res) => {
+            if res.status().is_success() {
+                println!("恭喜{name}注册成功，请登陆场聊吧！")
+            } else {
+                println!("Register failed: HTTP {}", res.status());
+            }
+        }
+        Err(err) => {println!("注册失败: {}", err)}
+    }
+}
+
+#[derive(Deserialize)]
+struct RegisterRes {
+    code: i8,
+    msg: String,
+    data: i8,
+}
+
+#[derive(Parser)]
+#[command(version="0.1",about="A Chat Client", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// 注册用户
+    Register {
+        /// 用户名
+        #[arg(short, long, value_parser = check_name)]
+        name: String,
+        /// 密码
+        #[arg(short, long, value_parser = check_password)]
+        password: String,
+    },
+    /// 登陆
+    Login {
+        /// 用户名
+        #[arg(short, long)]
+        name: String,
+        /// 密码
+        #[arg(short, long)]
+        password: String,
+    },
+}
+/// 校验用户名
+/// 用户名必须是纯英文
+fn check_name(name: &str) -> Result<String, String> {
+    // name 必须是纯英文
+    if !name.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Err("用户名必须为英文".to_string());
+    }
+    // TODO 检查数据库中是否存在该用户名
+    Ok(name.to_string())
+}
+
+/// 检查密码是否有效
+/// 有效的密码必须包含至少一个数字、一个大写字母和一个小写字母。
+fn check_password(password: &str) -> Result<String, String> {
+    let has_digit = password.chars().any(|c| c.is_digit(10));
+    let has_uppercase = password.chars().any(|c| c.is_uppercase());
+    let has_lowercase = password.chars().any(|c| c.is_lowercase());
+
+    if has_digit && has_uppercase && has_lowercase {
+        Ok(password.to_string())
+    } else {
+        Err("有效的密码必须包含至少一个数字、一个大写字母和一个小写字母。".to_string())
+    }
+}
 
 fn cli() {
     let matches = Command::new("chat-cli")
@@ -98,8 +191,8 @@ fn cli() {
         let friends = match response {
             Ok(res) => {
                 if res.status().is_success() {
-                    match res.json::<Friends>() {
-                        Ok(Friends { msg:_, data, code: _ }) => Some(data),
+                    match res.json::<FriendsRes>() {
+                        Ok(FriendsRes { msg: _, data, code: _ }) => Some(data),
                         Err(e) => {
                             println!("Failed to read response: {}", e);
                             None
@@ -135,21 +228,18 @@ fn cli() {
     }
 }
 
-// #[derive(Deserialize)]
-// enum AppRes {
-    #[derive(Deserialize)]
-   struct  Login {
-        code: i8,
-        msg: String,
-        data: LoginRes,
-    }
-    #[derive(Deserialize)]
-        struct  Friends {
-        code: i8,
-        msg: String,
-        data: Vec<Friend>,
-    }
-// }
+#[derive(Deserialize)]
+struct Login {
+    code: i8,
+    msg: String,
+    data: LoginRes,
+}
+#[derive(Deserialize)]
+struct FriendsRes {
+    code: i8,
+    msg: String,
+    data: Vec<Friend>,
+}
 
 #[derive(Deserialize)]
 struct LoginRes {
