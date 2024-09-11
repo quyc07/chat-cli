@@ -1,8 +1,8 @@
-use crate::{delimiter, main_select, HOST};
+use crate::main_select::MainSelect;
+use crate::{delimiter, HOST};
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::cell::RefCell;
-use crate::main_select::MainSelect;
 
 pub(crate) fn register(name: String, password: String) {
     // 使用reqwest 向 POST HOST/user/register 接口注册用户
@@ -17,6 +17,7 @@ pub(crate) fn register(name: String, password: String) {
         .send();
     match res {
         Ok(res) => {
+            println!("{:?}", res);
             match res.status() {
                 StatusCode::OK => {
                     println!("恭喜{name}注册成功，请登陆场聊吧！")
@@ -25,7 +26,7 @@ pub(crate) fn register(name: String, password: String) {
                     println!("用户名已存在，请重新注册")
                 }
                 _ => {
-                    println!("注册失败: {}", res.json::<RegisterRes>().unwrap().msg)
+                    println!("注册失败: {}", res.text().unwrap())
                 }
             }
         }
@@ -35,12 +36,6 @@ pub(crate) fn register(name: String, password: String) {
     }
 }
 
-#[derive(Deserialize)]
-struct RegisterRes {
-    code: i8,
-    msg: String,
-    data: i8,
-}
 
 thread_local! {
         pub static TOKEN: RefCell<String> = RefCell::new(String::default());
@@ -56,15 +51,15 @@ pub(crate) fn login(name: String, password: String) {
             "password": password
         }))
         .send();
-
+    println!("{:?}", response);
     let token = match response {
         Ok(res) => {
             if res.status().is_success() {
-                match res.json::<Login>() {
-                    Ok(Login { msg: _, data, code: _ }) => {
+                match res.json::<LoginRes>() {
+                    Ok(LoginRes { access_token }) => {
                         println!("登陆成功");
                         delimiter();
-                        Some(data.access_token)
+                        Some(access_token)
                     }
                     Err(e) => {
                         println!("Failed to parse response: {}", e);
@@ -94,12 +89,6 @@ pub(crate) fn login(name: String, password: String) {
 }
 
 #[derive(Deserialize)]
-struct Login {
-    code: i8,
-    msg: String,
-    data: LoginRes,
-}
-#[derive(Deserialize)]
-struct LoginRes {
-    access_token: String,
+pub(crate) struct LoginRes {
+    pub access_token: String,
 }

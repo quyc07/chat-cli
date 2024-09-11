@@ -31,10 +31,10 @@ fn chat_history_with_friend(friend: &Friend) {
         Ok(res) => {
             match res.status() {
                 StatusCode::OK => {
-                    let res = res.json::<ChatHistory>();
+                    let res = res.json::<Vec<UserHistoryMsg>>();
                     match res {
                         Ok(res) => {
-                            for msg in res.data {
+                            for msg in res {
                                 println!("{}", serde_json::to_string(&msg).unwrap());
                             }
                         }
@@ -55,13 +55,6 @@ fn chat_history_with_friend(friend: &Friend) {
             return;
         }
     }
-}
-
-#[derive(Deserialize)]
-struct ChatHistory {
-    code: i8,
-    msg: String,
-    data: Vec<UserHistoryMsg>,
 }
 
 /// 历史聊天记录

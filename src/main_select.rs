@@ -74,12 +74,8 @@ fn chat_with_friends() {
     let friends = match response {
         Ok(res) => {
             if res.status().is_success() {
-                match res.json::<FriendsRes>() {
-                    Ok(FriendsRes {
-                           msg: _,
-                           data,
-                           code: _,
-                       }) => Some(data),
+                match res.json::<Vec<Friend>>() {
+                    Ok(friends) => Some(friends),
                     Err(e) => {
                         println!("Failed to read response: {}", e);
                         None
@@ -104,13 +100,6 @@ fn chat_with_friends() {
 
 fn add_friend() {
     todo!()
-}
-
-#[derive(Deserialize)]
-struct FriendsRes {
-    code: i8,
-    msg: String,
-    data: Vec<Friend>,
 }
 
 #[derive(Deserialize)]
