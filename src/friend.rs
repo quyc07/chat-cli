@@ -71,6 +71,7 @@ fn chat_history_with_friend(friend: &Friend) {
                                     }
                                     if line.starts_with("data:") {
                                         let event_data = line.trim_start_matches("data:").trim();
+                                        // TODO bugfix
                                         match serde_json::from_str::<Message>(event_data) {
                                             Ok(Message::ChatMessage(chat_message)) => {
                                                 let sender = if chat_message.payload.from_uid == friend.id {
