@@ -3,12 +3,14 @@ use crate::main_select::{Friend, MainSelect};
 use crate::user::TOKEN;
 use crate::{delimiter, HOST};
 use chrono::{DateTime, Local};
-use reqwest::StatusCode;
+use futures::StreamExt;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use std::io::BufRead;
+use tokio::io;
+use tokio::io::AsyncBufReadExt;
 
-pub(crate) fn select(friends: Vec<Friend>) {
+pub(crate) async fn select(friends: Vec<Friend>) {
     let friend_names: Vec<&str> = friends.iter().map(|f| f.name.as_str()).collect();
     let selection = dialoguer::Select::new()
         .with_prompt(MainSelect::ChatWithFriends.to_str())
@@ -19,100 +21,142 @@ pub(crate) fn select(friends: Vec<Friend>) {
     let selected_friend = &friends[selection];
     delimiter();
     // TODO 获取聊天记录
-    chat_history_with_friend(selected_friend);
+    chat_history_with_friend(selected_friend).await;
 }
 
-fn chat_history_with_friend(friend: &Friend) {
-    let url = format!("{HOST}/user/{}/history", friend.id);
-    let res = reqwest::blocking::Client::new()
-        .get(url)
-        .header("Authorization", format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())))
-        .send();
+async fn chat_history_with_friend(friend: &Friend) {
+    if fetch_history(&friend).await {
+        return;
+    }
 
-    match res {
-        Ok(res) => {
-            match res.status() {
-                StatusCode::OK => {
-                    let res = res.json::<Vec<UserHistoryMsg>>();
-                    match res {
-                        Ok(res) => {
-                            println!("Chat with {}:", friend.name);
-                            println!("----------------------------------------");
-                            if res.is_empty() {
-                                println!("No chat history available.");
-                            } else {
-                                for msg in res {
-                                    let sender = if msg.from_uid == friend.id {
-                                        &friend.name
-                                    } else {
-                                        "You"
-                                    };
-                                    println!("[{}] {}: {}", msg.time.format("%Y-%m-%d %H:%M:%S"), sender, msg.msg);
-                                }
+    let mut sse_stream = Client::new()
+        .get(format!("{HOST}/event/stream"))
+        .header(
+            "Authorization",
+            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+        )
+        .header("User-Agent", "Chat-Cli/1.0")
+        .send()
+        .await
+        .unwrap()
+        .bytes_stream();
+
+    // 异步监听用户输入
+    let stdin = io::BufReader::new(io::stdin());
+    let mut stdin_lines = stdin.lines();
+
+    loop {
+        tokio::select! {
+        // 处理从SSE流中接收到的消息
+        Some(msg) = sse_stream.next() => {
+            match msg {
+                Ok(bytes) => {
+                    let sse_message = String::from_utf8(bytes.to_vec()).unwrap();
+                    // 获取data
+                    if let Some(event_data) = sse_message.lines()
+                    .into_iter()
+                    .find(|line| line.starts_with("data:"))
+                    .map(|line| line.trim_start_matches("data:").trim())
+                    .filter(|line| !line.is_empty()){
+                        match serde_json::from_str::<Message>(event_data) {
+                            Ok(Message::ChatMessage(chat_message)) => {
+                                let sender = if chat_message.payload.from_uid == friend.id {
+                                    &friend.name
+                                } else {
+                                    "You"
+                                };
+                                println!("[{}] {}: {}\n",
+                                         chat_message.payload.created_at.format("%Y-%m-%d %H:%M:%S"),
+                                         sender,
+                                         chat_message.payload.detail.get_content(),
+                                );
+
+
                             }
-                            println!("----------------------------------------");
-                            println!("Listening for new messages...");
-                            
-                            let client = reqwest::blocking::Client::new();
-                            let response = client.get(format!("{}/event/stream", HOST))
-                                .header("Authorization", format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())))
-                                .header("User-Agent", "Chat-Cli/1.0")
-                                .send()
-                                .expect("Failed to connect to SSE stream");
-
-                            let mut reader = std::io::BufReader::new(response);
-                            let mut line = String::new();
-
-                            loop {
-                                line.clear();
-                                if let Ok(bytes_read) = reader.read_line(&mut line) {
-                                    if bytes_read == 0 {
-                                        break;
-                                    }
-                                    if line.starts_with("data:") {
-                                        let event_data = line.trim_start_matches("data:").trim();
-                                        // TODO bugfix
-                                        match serde_json::from_str::<Message>(event_data) {
-                                            Ok(Message::ChatMessage(chat_message)) => {
-                                                let sender = if chat_message.payload.from_uid == friend.id {
-                                                    &friend.name
-                                                } else {
-                                                    "You"
-                                                };
-                                                println!("[{}] {}: {}", 
-                                                    chat_message.payload.created_at.format("%Y-%m-%d %H:%M:%S"), 
-                                                    sender, 
-                                                    chat_message.payload.detail.get_content(),
-                                                );
-                                            }
-                                            Ok(Message::Heartbeat(heartbeat_message)) => {
-                                                println!("Heartbeat received: {:?}", heartbeat_message);
-                                            }
-                                            Err(err) => {
-                                                eprintln!("Failed to parse event data: {}", err);
-                                            }
-                                        }
-                                    }
-                                }
+                            Ok(Message::Heartbeat(_)) => {
+                                // todo!();
+                                // println!("Heartbeat received: {:?}", heartbeat_message);
+                            }
+                            Err(err) => {
+                                eprintln!("Failed to parse event data: {}", err);
                             }
                         }
-                        Err(err) => {
-                            println!("Failed to parse chat history:{}", err);
-                            return;
-                        }
+
                     }
-                }
-                _ => {
-                    println!("Failed to get chat history:{}", res.status());
-                    return;
+                },
+                Err(e) => {
+                    eprintln!("SSE错误: {}", e);
+                    break;
                 }
             }
         }
-        Err(err) => {
-            println!("Failed to get chat history:{}", err);
-            return;
+
+        // 处理用户输入
+        Ok(Some(input)) = stdin_lines.next_line() => {
+            if input.trim() == "exit" {
+                println!("退出...");
+                break;
+            } else {
+                println!("你输入了: {}", input);
+            }
+        }
         }
     }
+}
+
+async fn fetch_history(friend: &&Friend) -> bool {
+    let url = format!("{HOST}/user/{}/history", friend.id);
+    let res = Client::new()
+        .get(url)
+        .header(
+            "Authorization",
+            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+        )
+        .send()
+        .await;
+    match res {
+        Ok(res) => match res.status() {
+            StatusCode::OK => {
+                let res = res.json::<Vec<UserHistoryMsg>>().await;
+                match res {
+                    Ok(res) => {
+                        println!("Chat with {}:", friend.name);
+                        println!("----------------------------------------");
+                        if res.is_empty() {
+                            println!("No chat history available.");
+                        } else {
+                            for msg in res {
+                                let sender = if msg.from_uid == friend.id {
+                                    &friend.name
+                                } else {
+                                    "You"
+                                };
+                                println!(
+                                    "[{}] {}: {}",
+                                    msg.time.format("%Y-%m-%d %H:%M:%S"),
+                                    sender,
+                                    msg.msg
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        println!("Failed to parse chat history:{}", err);
+                        return true;
+                    }
+                }
+            }
+            _ => {
+                println!("Failed to get chat history:{}", res.status());
+                return true;
+            }
+        },
+        Err(err) => {
+            println!("Failed to get chat history:{}", err);
+            return true;
+        }
+    }
+    false
 }
 
 /// 历史聊天记录
@@ -129,7 +173,7 @@ struct UserHistoryMsg {
     from_uid: i32,
 }
 
-#[derive(Debug, Clone, Serialize,Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
     ChatMessage(ChatMessage),
     Heartbeat(HeartbeatMessage),
@@ -149,7 +193,7 @@ impl Display for Message {
     }
 }
 
-#[derive(Debug, Clone, Serialize,Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeartbeatMessage {
     #[serde(with = "datetime_format")]
     time: DateTime<Local>,
@@ -239,4 +283,23 @@ pub struct MessageContent {
     // pub content_type: String,
     /// Content
     pub(crate) content: String,
+}
+
+#[cfg(test)]
+mod test {
+    use serde_json::json;
+
+    #[test]
+    fn test_get_friend_history() {
+        let history = json!({"ChatMessage":{"mid":98,"payload":{"from_uid":10,"created_at":"2024-09-12T23:15:05.264972+08:00","target":{"User":{"uid":11}},"detail":{"Normal":{"content":{"content":"hello world!!!!!"}}}}}});
+        let result = serde_json::from_slice::<super::Message>(history.to_string().as_bytes());
+        match result {
+            Ok(msg) => {
+                println!("{:?}", msg)
+            }
+            Err(err) => {
+                println!("{}", err)
+            }
+        }
+    }
 }

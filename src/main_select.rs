@@ -1,6 +1,7 @@
 use crate::main_select::MainSelect::{AddFriend, ChatHistory, ChatInGroups, ChatWithFriends};
 use crate::user::TOKEN;
 use crate::{friend, HOST};
+use reqwest::Client;
 use serde::Deserialize;
 
 pub(crate) enum MainSelect {
@@ -10,9 +11,13 @@ pub(crate) enum MainSelect {
     ChatInGroups,
 }
 
-
 fn main_selects() -> Vec<&'static str> {
-    vec![AddFriend.to_str(), ChatHistory.to_str(), ChatWithFriends.to_str(), ChatInGroups.to_str()]
+    vec![
+        AddFriend.to_str(),
+        ChatHistory.to_str(),
+        ChatWithFriends.to_str(),
+        ChatInGroups.to_str(),
+    ]
 }
 impl MainSelect {
     pub(crate) fn to_str(&self) -> &str {
@@ -34,7 +39,7 @@ impl MainSelect {
             _ => panic!("Invalid string"),
         }
     }
-    pub(crate) fn select() {
+    pub(crate) async fn select() {
         let options = main_selects();
         let selection = dialoguer::Select::new()
             .with_prompt("请选择")
@@ -42,14 +47,14 @@ impl MainSelect {
             .interact()
             .unwrap();
         let select = MainSelect::from_str(options[selection]);
-        select.do_select();
+        select.do_select().await;
     }
 
-    fn do_select(&self) {
+    async fn do_select(&self) {
         match self {
             AddFriend => add_friend(),
             ChatHistory => chat_history(),
-            ChatWithFriends => chat_with_friends(),
+            ChatWithFriends => chat_with_friends().await,
             ChatInGroups => chat_in_groups(),
         }
     }
@@ -63,18 +68,22 @@ fn chat_in_groups() {
     todo!()
 }
 
-fn chat_with_friends() {
-    let client = reqwest::blocking::Client::new();
+async fn chat_with_friends() {
+    let client = Client::new();
     let friends_url = format!("{HOST}/friend");
     let response = client
         .get(&friends_url)
-        .header("Authorization", format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())))
-        .send();
+        .header(
+            "Authorization",
+            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+        )
+        .send()
+        .await;
 
     let friends = match response {
         Ok(res) => {
             if res.status().is_success() {
-                match res.json::<Vec<Friend>>() {
+                match res.json::<Vec<Friend>>().await {
                     Ok(friends) => Some(friends),
                     Err(e) => {
                         println!("Failed to read response: {}", e);
@@ -95,7 +104,7 @@ fn chat_with_friends() {
         println!("Get friends failed. Exiting the program.");
         std::process::exit(1);
     }
-    friend::select(friends.unwrap());
+    friend::select(friends.unwrap()).await;
 }
 
 fn add_friend() {

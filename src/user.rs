@@ -1,61 +1,58 @@
 use crate::main_select::MainSelect;
 use crate::{delimiter, HOST};
-use reqwest::StatusCode;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use std::cell::RefCell;
 
-pub(crate) fn register(name: String, password: String) {
+pub(crate) async fn register(name: String, password: String) {
     // 使用reqwest 向 POST HOST/user/register 接口注册用户
     let url = format!("{HOST}/user/register");
-    let client = reqwest::blocking::Client::new();
+    let client = Client::new();
     let res = client
         .post(&url)
         .json(&serde_json::json!({
             "name": name,
             "password": password
         }))
-        .send();
+        .send()
+        .await;
     match res {
-        Ok(res) => {
-            println!("{:?}", res);
-            match res.status() {
-                StatusCode::OK => {
-                    println!("恭喜{name}注册成功，请登陆场聊吧！")
-                }
-                StatusCode::CONFLICT => {
-                    println!("用户名已存在，请重新注册")
-                }
-                _ => {
-                    println!("注册失败: {}", res.text().unwrap())
-                }
+        Ok(res) => match res.status() {
+            StatusCode::OK => {
+                println!("恭喜{name}注册成功，请登陆场聊吧！")
             }
-        }
+            StatusCode::CONFLICT => {
+                println!("用户名已存在，请重新注册")
+            }
+            _ => {
+                println!("注册失败: {}", res.text().await.unwrap())
+            }
+        },
         Err(err) => {
             println!("注册失败: {}", err)
         }
     }
 }
 
-
 thread_local! {
-        pub static TOKEN: RefCell<String> = RefCell::new(String::default());
-    }
+    pub static TOKEN: RefCell<String> = RefCell::new(String::default());
+}
 
-pub(crate) fn login(name: String, password: String) {
+pub(crate) async fn login(name: String, password: String) {
     let login_url = format!("{HOST}/token/login");
-    let client = reqwest::blocking::Client::new();
+    let client = Client::new();
     let response = client
         .post(&login_url)
         .json(&serde_json::json!({
             "name": name,
             "password": password
         }))
-        .send();
-    println!("{:?}", response);
+        .send()
+        .await;
     let token = match response {
         Ok(res) => {
             if res.status().is_success() {
-                match res.json::<LoginRes>() {
+                match res.json::<LoginRes>().await {
                     Ok(LoginRes { access_token }) => {
                         println!("登陆成功");
                         delimiter();
@@ -85,7 +82,7 @@ pub(crate) fn login(name: String, password: String) {
         std::process::exit(1);
     }
     TOKEN.replace(token.unwrap());
-    MainSelect::select();
+    MainSelect::select().await;
 }
 
 #[derive(Deserialize)]
