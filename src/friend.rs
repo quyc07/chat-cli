@@ -4,10 +4,10 @@ use crate::user::TOKEN;
 use crate::{delimiter, HOST};
 use chrono::{DateTime, Local};
 use futures::StreamExt;
+use regex::Regex;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use tokio::io;
 use tokio::io::AsyncBufReadExt;
 
 pub(crate) async fn select(friends: Vec<Friend>) {
@@ -38,11 +38,14 @@ async fn chat_with_friend(friend: &Friend) {
         .unwrap()
         .bytes_stream();
 
-    // 异步监听用户输入
-    let stdin = io::BufReader::new(io::stdin());
-    let mut stdin_lines = stdin.lines();
+    // 异步监听用户输入，使用tokio::io::BufReader及时获取用户输入数据
+    let stdin = tokio::io::stdin();
+    let mut reader = tokio::io::BufReader::new(stdin);
 
     loop {
+        let mut input = String::new();
+        let input_future = reader.read_line(&mut input);
+        // TODO sse 请求无法获取执行权
         tokio::select! {
             // 处理从SSE流中接收到的消息
             Some(msg) = sse_stream.next() => {
@@ -62,13 +65,11 @@ async fn chat_with_friend(friend: &Friend) {
                                     } else {
                                         "You"
                                     };
-                                    println!("[{}] {}: {}\n",
+                                    print!("[{}] {}: {}",
                                              chat_message.payload.created_at.format("%Y-%m-%d %H:%M:%S"),
                                              sender,
                                              chat_message.payload.detail.get_content(),
                                     );
-
-
                                 }
                                 Ok(Message::Heartbeat(_)) => {
                                     // todo!();
@@ -87,13 +88,12 @@ async fn chat_with_friend(friend: &Friend) {
                     }
                 }
             }
-
             // 处理用户输入
-            Ok(Some(input)) = stdin_lines.next_line() => {
+            Ok(_) = input_future => {
                 if input.trim() == "exit" {
                     println!("退出...");
                     break;
-                } else {
+                } else if !input.trim().is_empty() {
                     let url = format!("{HOST}/user/{}/send", friend.id);
                     let res = client
                         .post(&url)
@@ -103,27 +103,30 @@ async fn chat_with_friend(friend: &Friend) {
                             format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
                         )
                         .body(serde_json::json!({
-                            "msg": input
+                            "msg": replace_whitespace(&input),
                         }).to_string())
                         .send()
                         .await;
-                    match res {
-                        Ok(res) => match res.status() {
-                            StatusCode::OK => {
 
+                    match res {
+                        Ok(res) => {
+                            if res.status() != StatusCode::OK {
+                                println!("Send message failed: {}, {}", res.status(), res.text().await.unwrap());
                             }
-                            _ => {
-                                println!("Send message failed:{},{}", res.status(),res.text().await.unwrap());
-                            }
-                        },
+                        }
                         Err(err) => {
-                            println!("Send message failed:{}", err);
+                            println!("Send message failed: {}", err);
                         }
                     }
                 }
             }
         }
     }
+}
+// 替换掉换行符
+fn replace_whitespace(text: &str) -> String {
+    let re = Regex::new(r"[\s\r\n]+").unwrap();
+    re.replace_all(&text, "").into_owned()
 }
 
 async fn fetch_history(friend: &Friend) {

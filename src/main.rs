@@ -1,4 +1,3 @@
-mod chat;
 mod datetime;
 mod friend;
 mod main_select;
