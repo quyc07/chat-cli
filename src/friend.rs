@@ -20,16 +20,13 @@ pub(crate) async fn select(friends: Vec<Friend>) {
 
     let selected_friend = &friends[selection];
     delimiter();
-    // TODO 获取聊天记录
-    chat_history_with_friend(selected_friend).await;
+    fetch_history(selected_friend).await;
+    chat_with_friend(selected_friend).await;
 }
 
-async fn chat_history_with_friend(friend: &Friend) {
-    if fetch_history(&friend).await {
-        return;
-    }
-
-    let mut sse_stream = Client::new()
+async fn chat_with_friend(friend: &Friend) {
+    let client = Client::new();
+    let mut sse_stream = client
         .get(format!("{HOST}/event/stream"))
         .header(
             "Authorization",
@@ -47,64 +44,89 @@ async fn chat_history_with_friend(friend: &Friend) {
 
     loop {
         tokio::select! {
-        // 处理从SSE流中接收到的消息
-        Some(msg) = sse_stream.next() => {
-            match msg {
-                Ok(bytes) => {
-                    let sse_message = String::from_utf8(bytes.to_vec()).unwrap();
-                    // 获取data
-                    if let Some(event_data) = sse_message.lines()
-                    .into_iter()
-                    .find(|line| line.starts_with("data:"))
-                    .map(|line| line.trim_start_matches("data:").trim())
-                    .filter(|line| !line.is_empty()){
-                        match serde_json::from_str::<Message>(event_data) {
-                            Ok(Message::ChatMessage(chat_message)) => {
-                                let sender = if chat_message.payload.from_uid == friend.id {
-                                    &friend.name
-                                } else {
-                                    "You"
-                                };
-                                println!("[{}] {}: {}\n",
-                                         chat_message.payload.created_at.format("%Y-%m-%d %H:%M:%S"),
-                                         sender,
-                                         chat_message.payload.detail.get_content(),
-                                );
+            // 处理从SSE流中接收到的消息
+            Some(msg) = sse_stream.next() => {
+                match msg {
+                    Ok(bytes) => {
+                        let sse_message = String::from_utf8(bytes.to_vec()).unwrap();
+                        // 获取data
+                        if let Some(event_data) = sse_message.lines()
+                        .into_iter()
+                        .find(|line| line.starts_with("data:"))
+                        .map(|line| line.trim_start_matches("data:").trim())
+                        .filter(|line| !line.is_empty()){
+                            match serde_json::from_str::<Message>(event_data) {
+                                Ok(Message::ChatMessage(chat_message)) => {
+                                    let sender = if chat_message.payload.from_uid == friend.id {
+                                        &friend.name
+                                    } else {
+                                        "You"
+                                    };
+                                    println!("[{}] {}: {}\n",
+                                             chat_message.payload.created_at.format("%Y-%m-%d %H:%M:%S"),
+                                             sender,
+                                             chat_message.payload.detail.get_content(),
+                                    );
 
 
+                                }
+                                Ok(Message::Heartbeat(_)) => {
+                                    // todo!();
+                                    // println!("Heartbeat received: {:?}", heartbeat_message);
+                                }
+                                Err(err) => {
+                                    eprintln!("Failed to parse event data: {}", err);
+                                }
                             }
-                            Ok(Message::Heartbeat(_)) => {
-                                // todo!();
-                                // println!("Heartbeat received: {:?}", heartbeat_message);
-                            }
-                            Err(err) => {
-                                eprintln!("Failed to parse event data: {}", err);
-                            }
+
                         }
-
+                    },
+                    Err(e) => {
+                        eprintln!("SSE错误: {}", e);
+                        break;
                     }
-                },
-                Err(e) => {
-                    eprintln!("SSE错误: {}", e);
-                    break;
                 }
             }
-        }
 
-        // 处理用户输入
-        Ok(Some(input)) = stdin_lines.next_line() => {
-            if input.trim() == "exit" {
-                println!("退出...");
-                break;
-            } else {
-                println!("你输入了: {}", input);
+            // 处理用户输入
+            Ok(Some(input)) = stdin_lines.next_line() => {
+                if input.trim() == "exit" {
+                    println!("退出...");
+                    break;
+                } else {
+                    let url = format!("{HOST}/user/{}/send", friend.id);
+                    let res = client
+                        .post(&url)
+                        .header("Content-Type", "application/json")
+                        .header(
+                            "Authorization",
+                            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+                        )
+                        .body(serde_json::json!({
+                            "msg": input
+                        }).to_string())
+                        .send()
+                        .await;
+                    match res {
+                        Ok(res) => match res.status() {
+                            StatusCode::OK => {
+
+                            }
+                            _ => {
+                                println!("Send message failed:{},{}", res.status(),res.text().await.unwrap());
+                            }
+                        },
+                        Err(err) => {
+                            println!("Send message failed:{}", err);
+                        }
+                    }
+                }
             }
-        }
         }
     }
 }
 
-async fn fetch_history(friend: &&Friend) -> bool {
+async fn fetch_history(friend: &Friend) {
     let url = format!("{HOST}/user/{}/history", friend.id);
     let res = Client::new()
         .get(url)
@@ -142,21 +164,17 @@ async fn fetch_history(friend: &&Friend) -> bool {
                     }
                     Err(err) => {
                         println!("Failed to parse chat history:{}", err);
-                        return true;
                     }
                 }
             }
             _ => {
                 println!("Failed to get chat history:{}", res.status());
-                return true;
             }
         },
         Err(err) => {
             println!("Failed to get chat history:{}", err);
-            return true;
         }
     }
-    false
 }
 
 /// 历史聊天记录

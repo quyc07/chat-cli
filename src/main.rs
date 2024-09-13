@@ -1,3 +1,4 @@
+mod chat;
 mod datetime;
 mod friend;
 mod main_select;
@@ -18,7 +19,7 @@ pub(crate) fn delimiter() {
     println!("{DELIMITER}");
 }
 
-pub const HOST: &str = "http://127.0.0.1:3001";
+pub const HOST: &str = "http://127.0.0.1:3000";
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
