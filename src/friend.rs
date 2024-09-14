@@ -8,6 +8,7 @@ use regex::Regex;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use std::io::{stdout, Write};
 use tokio::io::AsyncBufReadExt;
 
 pub(crate) async fn select(friends: Vec<Friend>) {
@@ -45,7 +46,6 @@ async fn chat_with_friend(friend: &Friend) {
     loop {
         let mut input = String::new();
         let input_future = reader.read_line(&mut input);
-        // TODO sse 请求无法获取执行权
         tokio::select! {
             // 处理从SSE流中接收到的消息
             Some(msg) = sse_stream.next() => {
@@ -53,23 +53,28 @@ async fn chat_with_friend(friend: &Friend) {
                     Ok(bytes) => {
                         let sse_message = String::from_utf8(bytes.to_vec()).unwrap();
                         // 获取data
-                        if let Some(event_data) = sse_message.lines()
+                        let data = sse_message.lines()
                         .into_iter()
                         .find(|line| line.starts_with("data:"))
                         .map(|line| line.trim_start_matches("data:").trim())
-                        .filter(|line| !line.is_empty()){
+                        .filter(|line| !line.is_empty());
+                        if let Some(event_data) = data {
                             match serde_json::from_str::<Message>(event_data) {
                                 Ok(Message::ChatMessage(chat_message)) => {
                                     let sender = if chat_message.payload.from_uid == friend.id {
                                         &friend.name
                                     } else {
+                                        // 清空用户输入的那一行
+                                        write!(stdout(), "{}{}", termion::cursor::Up(1),termion::clear::CurrentLine).unwrap();
                                         "You"
                                     };
-                                    print!("[{}] {}: {}",
+                                    println!("[{}] {}: {}",
                                              chat_message.payload.created_at.format("%Y-%m-%d %H:%M:%S"),
                                              sender,
                                              chat_message.payload.detail.get_content(),
                                     );
+                                    // 刷出数据
+                                    stdout().flush().unwrap();
                                 }
                                 Ok(Message::Heartbeat(_)) => {
                                     // todo!();
