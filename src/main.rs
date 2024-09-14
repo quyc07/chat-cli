@@ -28,54 +28,6 @@ async fn main() {
     }
 }
 
-async fn maina() -> Result<(), Box<dyn std::error::Error>> {
-    // 创建客户端以连接到SSE流
-    let client = Client::new();
-    // 异步请求SSE流
-    let mut sse_stream = client.get(format!("{}/event/stream", HOST))
-        .header("Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6MTEsIm5hbWUiOiJhbmR5IiwiZW1haWwiOiJxYWFAMTYzLmNvbSIsInBob25lIjoiMTg5MTEyMjMzNDQiLCJkZ3JhcGhfdWlkIjoiMHg0ZTQyIiwicm9sZSI6IlVzZXIiLCJleHAiOjE3MjYxNTkzNzN9.NX4wcm0QsqF46PA3dJUMSHwF92DpAyMpyo8U0JyI0-8")
-        .header("User-Agent", "Chat-Cli/1.0")
-        .send()
-        .await?
-        .bytes_stream();
-
-    // 异步监听用户输入
-    let stdin = io::BufReader::new(io::stdin());
-    let mut stdin_lines = stdin.lines();
-
-    println!("SSE 监听中... 输入 'exit' 退出");
-
-    loop {
-        tokio::select! {
-            // 处理从SSE流中接收到的消息
-            Some(msg) = sse_stream.next() => {
-                match msg {
-                    Ok(bytes) => {
-                        let sse_message = String::from_utf8(bytes.to_vec()).unwrap();
-                        println!("收到SSE消息: {}", sse_message);
-                    },
-                    Err(e) => {
-                        eprintln!("SSE错误: {}", e);
-                        break;
-                    }
-                }
-            }
-
-            // 处理用户输入
-            Ok(Some(input)) = stdin_lines.next_line() => {
-                if input.trim() == "exit" {
-                    println!("退出...");
-                    break;
-                } else {
-                    println!("你输入了: {}", input);
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 #[derive(Parser)]
 #[command(version="0.1",about="A Chat Client", long_about = None)]
 struct Cli {
