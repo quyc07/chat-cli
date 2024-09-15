@@ -1,11 +1,9 @@
-use crate::datetime::datetime_format;
 use crate::main_select::MainSelect;
-use crate::{delimiter, HOST};
-use chrono::{DateTime, Local};
+use crate::token::CURRENT_USER;
+use crate::{delimiter, token, HOST};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
-use std::borrow::Borrow;
-use std::cell::RefCell;
+
 use std::time::Duration;
 
 pub(crate) async fn register(name: String, password: String) {
@@ -36,11 +34,6 @@ pub(crate) async fn register(name: String, password: String) {
             println!("注册失败: {}", err)
         }
     }
-}
-
-thread_local! {
-    pub static TOKEN: RefCell<String> = RefCell::new(String::default());
-    pub static TOKEN_EXPIRE_TIME: RefCell<DateTime<Local>> = RefCell::new(Local::now());
 }
 
 pub(crate) async fn login(name: String, password: String) {
@@ -87,25 +80,35 @@ pub(crate) async fn login(name: String, password: String) {
         std::process::exit(1);
     }
     let token = token.unwrap();
-    TOKEN.replace(token.clone());
+    let user = token::parse_token(token.as_str()).await.unwrap().claims;
+    {
+        let mut guard = CURRENT_USER.lock().unwrap();
+        guard.user = user; // Create a longer-lived binding
+        guard.token = token; // Create a longer-lived binding
+    }
+    let token = format!("Bearer {}", CURRENT_USER.lock().unwrap().token);
     // 启动异步线程，定时刷新token过期时间
     tokio::spawn(async move {
         loop {
             let renew_token_period = Duration::from_secs(30);
+            tokio::time::sleep(renew_token_period).await;
             println!("Refreshing token...");
             let renew_url = format!("{HOST}/token/renew");
             let client = Client::new();
             let response = client
                 .patch(renew_url)
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", token.clone())
                 .send()
                 .await;
             match response {
                 Ok(res) => {
                     if res.status().is_success() {
                         match res.text().await {
-                            Ok(token) => {
-                                TOKEN.replace(token.clone());
+                            Ok(t) => {
+                                let token_data = token::parse_token(t.as_str()).await.unwrap();
+                                let mut guard = CURRENT_USER.lock().unwrap();
+                                guard.user = token_data.claims;
+                                guard.token = t;
                             }
                             Err(e) => {
                                 println!("Failed to parse response: {}", e);
@@ -119,7 +122,6 @@ pub(crate) async fn login(name: String, password: String) {
                     println!("Failed to send token refresh request: {}", err);
                 }
             }
-            tokio::time::sleep(renew_token_period).await;
         }
     });
     MainSelect::select().await;

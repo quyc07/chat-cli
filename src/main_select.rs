@@ -1,8 +1,8 @@
 use crate::main_select::MainSelect::{AddFriend, ChatHistory, ChatInGroups, ChatWithFriends};
-use crate::user::TOKEN;
 use crate::{friend, HOST};
 use reqwest::Client;
 use serde::Deserialize;
+use crate::token::CURRENT_USER;
 
 pub(crate) enum MainSelect {
     AddFriend,
@@ -75,11 +75,10 @@ async fn chat_with_friends() {
         .get(&friends_url)
         .header(
             "Authorization",
-            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
         )
         .send()
         .await;
-
     let friends = match response {
         Ok(res) => {
             if res.status().is_success() {

@@ -1,6 +1,5 @@
 use crate::datetime::datetime_format;
 use crate::main_select::{Friend, MainSelect};
-use crate::user::TOKEN;
 use crate::{delimiter, HOST};
 use chrono::{DateTime, Local};
 use futures::StreamExt;
@@ -10,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::io::{stdout, Write};
 use tokio::io::AsyncBufReadExt;
+use crate::token::CURRENT_USER;
 
 pub(crate) async fn select(friends: Vec<Friend>) {
     let friend_names: Vec<&str> = friends.iter().map(|f| f.name.as_str()).collect();
@@ -31,7 +31,7 @@ async fn chat_with_friend(friend: &Friend) {
         .get(format!("{HOST}/event/stream"))
         .header(
             "Authorization",
-            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
         )
         .header("User-Agent", "Chat-Cli/1.0")
         .send()
@@ -105,7 +105,7 @@ async fn chat_with_friend(friend: &Friend) {
                         .header("Content-Type", "application/json")
                         .header(
                             "Authorization",
-                            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+                            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
                         )
                         .body(serde_json::json!({
                             "msg": replace_whitespace(&input),
@@ -128,6 +128,7 @@ async fn chat_with_friend(friend: &Friend) {
         }
     }
 }
+
 // 替换掉换行符
 fn replace_whitespace(text: &str) -> String {
     let re = Regex::new(r"[\s\r\n]+").unwrap();
@@ -140,7 +141,7 @@ async fn fetch_history(friend: &Friend) {
         .get(url)
         .header(
             "Authorization",
-            format!("Bearer {}", TOKEN.with_borrow(|t| t.clone())),
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
         )
         .send()
         .await;

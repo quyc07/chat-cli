@@ -2,13 +2,12 @@ mod datetime;
 mod friend;
 mod main_select;
 mod user;
+mod token;
 
 use clap::{Parser, Subcommand};
 use futures::StreamExt;
 use reqwest;
-use reqwest::Client;
 use serde::Deserialize;
-use tokio::io;
 use tokio::io::AsyncBufReadExt;
 
 // 分隔符

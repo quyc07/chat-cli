@@ -14,3 +14,4 @@ tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "macros"] }
 futures = "0.3.30"
 termion = "4.0.2"
 regex = "1.10.6"
+jsonwebtoken = "9"
