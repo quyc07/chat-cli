@@ -18,7 +18,7 @@ pub(crate) struct Friend {
     pub(crate) name: String,
 }
 
-pub(crate) async fn chat_with_friends() {
+pub(crate) async fn find_friends() {
     let client = Client::new();
     let friends_url = format!("{HOST}/friend");
     let response = client
@@ -53,10 +53,10 @@ pub(crate) async fn chat_with_friends() {
         println!("Get friends failed. Exiting the program.");
         std::process::exit(1);
     }
-    select(friends.unwrap()).await;
+    select_friend(friends.unwrap()).await;
 }
 
-pub(crate) async fn select(friends: Vec<Friend>) {
+pub(crate) async fn select_friend(friends: Vec<Friend>) {
     let friend_names: Vec<&str> = friends.iter().map(|f| f.name.as_str()).collect();
     let selection = dialoguer::Select::new()
         .with_prompt(MainSelect::ChatWithFriends.to_str())
@@ -66,6 +66,10 @@ pub(crate) async fn select(friends: Vec<Friend>) {
 
     let selected_friend = &friends[selection];
     delimiter();
+    chat_with_friend(selected_friend).await;
+}
+
+pub(crate) async fn chat_with_friend(selected_friend: &Friend) {
     fetch_history(selected_friend).await;
     chat(selected_friend).await;
 }

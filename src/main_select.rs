@@ -52,7 +52,7 @@ impl MainSelect {
         match self {
             AddFriend => add_friend(),
             RecentChat => recent_chat::recent_chat().await,
-            ChatWithFriends => friend::chat_with_friends().await,
+            ChatWithFriends => friend::find_friends().await,
             ChatInGroups => chat_in_groups(),
         }
     }
