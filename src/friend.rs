@@ -9,6 +9,7 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::io::{stdout, Write};
+use termion::raw::IntoRawMode;
 use tokio::io::AsyncBufReadExt;
 
 
@@ -18,7 +19,7 @@ pub(crate) struct Friend {
     pub(crate) name: String,
 }
 
-pub(crate) async fn chat_with_friends() {
+pub(crate) async fn find_friends() {
     let client = Client::new();
     let friends_url = format!("{HOST}/friend");
     let response = client
@@ -53,10 +54,10 @@ pub(crate) async fn chat_with_friends() {
         println!("Get friends failed. Exiting the program.");
         std::process::exit(1);
     }
-    select(friends.unwrap()).await;
+    select_friend(friends.unwrap()).await;
 }
 
-pub(crate) async fn select(friends: Vec<Friend>) {
+pub(crate) async fn select_friend(friends: Vec<Friend>) {
     let friend_names: Vec<&str> = friends.iter().map(|f| f.name.as_str()).collect();
     let selection = dialoguer::Select::new()
         .with_prompt(MainSelect::ChatWithFriends.to_str())
@@ -66,8 +67,34 @@ pub(crate) async fn select(friends: Vec<Friend>) {
 
     let selected_friend = &friends[selection];
     delimiter();
-    fetch_history(selected_friend).await;
+    chat_with_friend(selected_friend).await;
+}
+
+pub(crate) async fn chat_with_friend(selected_friend: &Friend) {
+    let latest_mid = fetch_history(selected_friend).await;
+    if let Some(latest_mid) = latest_mid {
+        set_read_index(UpdateReadIndex::User { target_uid: selected_friend.id, mid: latest_mid }).await;
+    }
     chat(selected_friend).await;
+}
+
+#[derive(Serialize)]
+enum UpdateReadIndex {
+    User { target_uid: i32, mid: i64 },
+    Group { target_gid: i32, mid: i64 },
+}
+
+async fn set_read_index(ri: UpdateReadIndex) {
+    let client = Client::new();
+    client
+        .put(format!("{HOST}/ri"))
+        .header(
+            "Authorization",
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
+        )
+        .body(serde_json::to_string(&ri).unwrap())
+        .send()
+        .await.expect("unable to set read index");
 }
 
 async fn chat(friend: &Friend) {
@@ -180,7 +207,7 @@ fn replace_whitespace(text: &str) -> String {
     re.replace_all(&text, "").into_owned()
 }
 
-async fn fetch_history(friend: &Friend) {
+async fn fetch_history(friend: &Friend) -> Option<i64> {
     let url = format!("{HOST}/user/{}/history", friend.id);
     let res = Client::new()
         .get(url)
@@ -200,8 +227,9 @@ async fn fetch_history(friend: &Friend) {
                         println!("----------------------------------------");
                         if res.is_empty() {
                             println!("No chat history available.");
+                            None
                         } else {
-                            for msg in res {
+                            for msg in &res {
                                 let sender = if msg.from_uid == friend.id {
                                     &friend.name
                                 } else {
@@ -214,19 +242,23 @@ async fn fetch_history(friend: &Friend) {
                                     msg.msg
                                 );
                             }
+                            Some(res.last()?.mid)
                         }
                     }
                     Err(err) => {
                         println!("Failed to parse chat history:{}", err);
+                        None
                     }
                 }
             }
             _ => {
                 println!("Failed to get chat history:{}", res.status());
+                None
             }
         },
         Err(err) => {
             println!("Failed to get chat history:{}", err);
+            None
         }
     }
 }
@@ -356,6 +388,8 @@ pub struct MessageContent {
     /// Content
     pub(crate) content: String,
 }
+
+
 
 #[cfg(test)]
 mod test {

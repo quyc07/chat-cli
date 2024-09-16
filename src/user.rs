@@ -4,9 +4,36 @@ use crate::{delimiter, token, HOST};
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 
+use dialoguer::theme::ColorfulTheme;
+use dialoguer::Input;
 use std::time::Duration;
 
 pub(crate) async fn register(name: String, password: String) {
+    let mail: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Your email")
+        .validate_with({
+            let mut force = None;
+            move |input: &String| -> Result<(), &str> {
+                if input.contains('@') || force.as_ref().map_or(false, |old| old == input) {
+                    Ok(())
+                } else {
+                    force = Some(input.clone());
+                    Err("This is not a mail address; type the same value again to force use")
+                }
+            }
+        })
+        .interact_text()
+        .unwrap();
+
+    println!("Email: {}", mail);
+
+    let phone: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Your phone")
+        .interact_text()
+        .unwrap();
+
+    println!("Phone: {}", phone);
+
     // 使用reqwest 向 POST HOST/user/register 接口注册用户
     let url = format!("{HOST}/user/register");
     let client = Client::new();
@@ -14,7 +41,9 @@ pub(crate) async fn register(name: String, password: String) {
         .post(&url)
         .json(&serde_json::json!({
             "name": name,
-            "password": password
+            "password": password,
+            "phone": phone,
+            "mail": mail
         }))
         .send()
         .await;
@@ -90,9 +119,8 @@ pub(crate) async fn login(name: String, password: String) {
     // 启动异步线程，定时刷新token过期时间
     tokio::spawn(async move {
         loop {
-            let renew_token_period = Duration::from_secs(30);
+            let renew_token_period = Duration::from_secs(60);
             tokio::time::sleep(renew_token_period).await;
-            println!("Refreshing token...");
             let renew_url = format!("{HOST}/token/renew");
             let client = Client::new();
             let response = client

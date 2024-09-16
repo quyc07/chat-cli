@@ -1,5 +1,5 @@
 use crate::main_select::MainSelect::{AddFriend, ChatInGroups, ChatWithFriends, RecentChat};
-use crate::{recent_chat, friend};
+use crate::{add_friend, friend, recent_chat};
 
 pub(crate) enum MainSelect {
     AddFriend,
@@ -50,16 +50,12 @@ impl MainSelect {
 
     async fn do_select(&self) {
         match self {
-            AddFriend => add_friend(),
+            AddFriend => add_friend::add_friend_select().await,
             RecentChat => recent_chat::recent_chat().await,
-            ChatWithFriends => friend::chat_with_friends().await,
+            ChatWithFriends => friend::find_friends().await,
             ChatInGroups => chat_in_groups(),
         }
     }
-}
-
-fn add_friend() {
-    todo!()
 }
 
 fn chat_in_groups() {

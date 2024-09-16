@@ -4,6 +4,9 @@ mod main_select;
 mod user;
 mod token;
 mod recent_chat;
+mod console;
+mod add_friend;
+mod style;
 
 use clap::{Parser, Subcommand};
 use futures::StreamExt;
