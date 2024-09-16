@@ -90,9 +90,9 @@ pub(crate) async fn login(name: String, password: String) {
     // 启动异步线程，定时刷新token过期时间
     tokio::spawn(async move {
         loop {
-            let renew_token_period = Duration::from_secs(30);
+            let renew_token_period = Duration::from_secs(10);
             tokio::time::sleep(renew_token_period).await;
-            println!("Refreshing token...");
+            println!("Refreshing token..., token={}", CURRENT_USER.lock().unwrap().token);
             let renew_url = format!("{HOST}/token/renew");
             let client = Client::new();
             let response = client

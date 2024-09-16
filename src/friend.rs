@@ -92,7 +92,7 @@ async fn set_read_index(ri: UpdateReadIndex) {
             "Authorization",
             format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
         )
-        .body(&ri)
+        .body(serde_json::to_string(&ri).unwrap())
         .send()
         .await.expect("unable to set read index");
 }
@@ -229,7 +229,7 @@ async fn fetch_history(friend: &Friend) -> Option<i64> {
                             println!("No chat history available.");
                             None
                         } else {
-                            for msg in res {
+                            for msg in &res {
                                 let sender = if msg.from_uid == friend.id {
                                     &friend.name
                                 } else {
