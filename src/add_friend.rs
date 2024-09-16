@@ -6,6 +6,30 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashMap;
 
+pub(crate) async fn add_friend_select() {
+    let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("请选择：")
+        .items(&vec!["添加好友", "好友申请"])
+        .interact()
+        .unwrap();
+    match selection {
+        0 => {
+            add_friend().await;
+        }
+        1 => {
+            friend_request().await;
+        }
+        _ => {
+            println!("error selection");
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn friend_request() {
+    todo!()
+}
+
 pub(crate) async fn add_friend() {
     let name: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("Friend name")
