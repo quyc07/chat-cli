@@ -1,29 +1,27 @@
-use crate::main_select::MainSelect::{AddFriend, ChatHistory, ChatInGroups, ChatWithFriends};
-use crate::{friend, HOST};
-use reqwest::Client;
-use serde::Deserialize;
-use crate::token::CURRENT_USER;
+use crate::main_select::MainSelect::{AddFriend, ChatInGroups, ChatWithFriends, RecentChat};
+use crate::{recent_chat, friend};
 
 pub(crate) enum MainSelect {
     AddFriend,
-    ChatHistory,
+    RecentChat,
     ChatWithFriends,
     ChatInGroups,
 }
 
-fn main_selects() -> Vec<&'static str> {
-    vec![
-        AddFriend.to_str(),
-        ChatHistory.to_str(),
-        ChatWithFriends.to_str(),
-        ChatInGroups.to_str(),
-    ]
-}
 impl MainSelect {
+    fn selects() -> Vec<&'static str> {
+        vec![
+            AddFriend.to_str(),
+            RecentChat.to_str(),
+            ChatWithFriends.to_str(),
+            ChatInGroups.to_str(),
+        ]
+    }
+
     pub(crate) fn to_str(&self) -> &str {
         match self {
             AddFriend => "添加好友",
-            ChatHistory => "聊天列表",
+            RecentChat => "最近消息",
             ChatWithFriends => "好友列表",
             ChatInGroups => "群聊列表",
         }
@@ -33,14 +31,14 @@ impl MainSelect {
     fn from_str(s: &str) -> Self {
         match s {
             "添加好友" => AddFriend,
-            "聊天列表" => ChatHistory,
+            "最近消息" => RecentChat,
             "好友列表" => ChatWithFriends,
             "群聊列表" => ChatInGroups,
             _ => panic!("Invalid string"),
         }
     }
     pub(crate) async fn select() {
-        let options = main_selects();
+        let options = MainSelect::selects();
         let selection = dialoguer::Select::new()
             .with_prompt("请选择")
             .items(&options)
@@ -53,65 +51,17 @@ impl MainSelect {
     async fn do_select(&self) {
         match self {
             AddFriend => add_friend(),
-            ChatHistory => chat_history(),
-            ChatWithFriends => chat_with_friends().await,
+            RecentChat => recent_chat::recent_chat().await,
+            ChatWithFriends => friend::chat_with_friends().await,
             ChatInGroups => chat_in_groups(),
         }
     }
-}
-
-fn chat_history() {
-    todo!()
-}
-
-fn chat_in_groups() {
-    todo!()
-}
-
-async fn chat_with_friends() {
-    let client = Client::new();
-    let friends_url = format!("{HOST}/friend");
-    let response = client
-        .get(&friends_url)
-        .header(
-            "Authorization",
-            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
-        )
-        .send()
-        .await;
-    let friends = match response {
-        Ok(res) => {
-            if res.status().is_success() {
-                match res.json::<Vec<Friend>>().await {
-                    Ok(friends) => Some(friends),
-                    Err(e) => {
-                        println!("Failed to read response: {}", e);
-                        None
-                    }
-                }
-            } else {
-                println!("Failed to get friends list: HTTP {}", res.status());
-                None
-            }
-        }
-        Err(e) => {
-            println!("Failed to send request: {}", e);
-            None
-        }
-    };
-    if friends.is_none() {
-        println!("Get friends failed. Exiting the program.");
-        std::process::exit(1);
-    }
-    friend::select(friends.unwrap()).await;
 }
 
 fn add_friend() {
     todo!()
 }
 
-#[derive(Deserialize)]
-pub(crate) struct Friend {
-    pub(crate) id: i32,
-    pub(crate) name: String,
+fn chat_in_groups() {
+    todo!()
 }

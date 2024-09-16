@@ -3,6 +3,7 @@ mod friend;
 mod main_select;
 mod user;
 mod token;
+mod recent_chat;
 
 use clap::{Parser, Subcommand};
 use futures::StreamExt;

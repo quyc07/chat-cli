@@ -1,5 +1,6 @@
 use crate::datetime::datetime_format;
-use crate::main_select::{Friend, MainSelect};
+use crate::main_select::MainSelect;
+use crate::token::CURRENT_USER;
 use crate::{delimiter, HOST};
 use chrono::{DateTime, Local};
 use futures::StreamExt;
@@ -9,7 +10,51 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::io::{stdout, Write};
 use tokio::io::AsyncBufReadExt;
-use crate::token::CURRENT_USER;
+
+
+#[derive(Deserialize)]
+pub(crate) struct Friend {
+    pub(crate) id: i32,
+    pub(crate) name: String,
+}
+
+pub(crate) async fn chat_with_friends() {
+    let client = Client::new();
+    let friends_url = format!("{HOST}/friend");
+    let response = client
+        .get(&friends_url)
+        .header(
+            "Authorization",
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
+        )
+        .send()
+        .await;
+    let friends = match response {
+        Ok(res) => {
+            if res.status().is_success() {
+                match res.json::<Vec<Friend>>().await {
+                    Ok(friends) => Some(friends),
+                    Err(e) => {
+                        println!("Failed to read response: {}", e);
+                        None
+                    }
+                }
+            } else {
+                println!("Failed to get friends list: HTTP {}", res.status());
+                None
+            }
+        }
+        Err(e) => {
+            println!("Failed to send request: {}", e);
+            None
+        }
+    };
+    if friends.is_none() {
+        println!("Get friends failed. Exiting the program.");
+        std::process::exit(1);
+    }
+    select(friends.unwrap()).await;
+}
 
 pub(crate) async fn select(friends: Vec<Friend>) {
     let friend_names: Vec<&str> = friends.iter().map(|f| f.name.as_str()).collect();
@@ -22,10 +67,10 @@ pub(crate) async fn select(friends: Vec<Friend>) {
     let selected_friend = &friends[selection];
     delimiter();
     fetch_history(selected_friend).await;
-    chat_with_friend(selected_friend).await;
+    chat(selected_friend).await;
 }
 
-async fn chat_with_friend(friend: &Friend) {
+async fn chat(friend: &Friend) {
     let client = Client::new();
     let mut sse_stream = client
         .get(format!("{HOST}/event/stream"))
