@@ -1,14 +1,11 @@
 use crate::datetime::datetime_format;
 use crate::friend::Friend;
 use crate::token::CURRENT_USER;
-use crate::{delimiter, friend, HOST};
+use crate::{console, delimiter, friend, HOST};
 use chrono::{DateTime, Local};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::stdout;
-use std::io::Write;
-use termion::raw::IntoRawMode;
 
 pub(crate) async fn recent_chat() {
     delimiter();
@@ -44,9 +41,9 @@ pub(crate) async fn recent_chat() {
                         ChatVo::Group {
                             gid,
                             group_name,
-                            uid,
+                            uid: _uid,
                             user_name,
-                            mid,
+                            mid: _mid,
                             msg,
                             msg_time,
                             unread,
@@ -60,7 +57,6 @@ pub(crate) async fn recent_chat() {
                     }
                 }).collect();
                 let options = select_to_id.keys().map(|s| s.as_str()).collect::<Vec<_>>();
-                println!("options size={}", options.len());
                 let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
                     .with_prompt("最近聊天列表")
                     .items(&options)
@@ -68,13 +64,7 @@ pub(crate) async fn recent_chat() {
                     .unwrap();
                 match select_to_id.get(options[selection]).unwrap() {
                     (Some(uid), None, name) => {
-                        let mut stdout = stdout().lock().into_raw_mode().unwrap();
-                        write!(
-                            stdout,
-                            "{}{}",
-                            termion::clear::All,
-                            termion::cursor::Goto(1, 1)
-                        ).unwrap();
+                        console::clean_all();
                         friend::chat_with_friend(&Friend { id: *uid, name: name.to_string() }).await;
                     }
                     (None, Some(gid), name) => { todo!() }

@@ -9,6 +9,7 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::io::{stdout, Write};
+use termion::raw::IntoRawMode;
 use tokio::io::AsyncBufReadExt;
 
 
@@ -70,8 +71,30 @@ pub(crate) async fn select_friend(friends: Vec<Friend>) {
 }
 
 pub(crate) async fn chat_with_friend(selected_friend: &Friend) {
-    fetch_history(selected_friend).await;
+    let latest_mid = fetch_history(selected_friend).await;
+    if let Some(latest_mid) = latest_mid {
+        set_read_index(UpdateReadIndex::User { target_uid: selected_friend.id, mid: latest_mid }).await;
+    }
     chat(selected_friend).await;
+}
+
+#[derive(Serialize)]
+enum UpdateReadIndex {
+    User { target_uid: i32, mid: i64 },
+    Group { target_gid: i32, mid: i64 },
+}
+
+async fn set_read_index(ri: UpdateReadIndex) {
+    let client = Client::new();
+    client
+        .put(format!("{HOST}/ri"))
+        .header(
+            "Authorization",
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
+        )
+        .body(&ri)
+        .send()
+        .await.expect("unable to set read index");
 }
 
 async fn chat(friend: &Friend) {
@@ -184,7 +207,7 @@ fn replace_whitespace(text: &str) -> String {
     re.replace_all(&text, "").into_owned()
 }
 
-async fn fetch_history(friend: &Friend) {
+async fn fetch_history(friend: &Friend) -> Option<i64> {
     let url = format!("{HOST}/user/{}/history", friend.id);
     let res = Client::new()
         .get(url)
@@ -204,6 +227,7 @@ async fn fetch_history(friend: &Friend) {
                         println!("----------------------------------------");
                         if res.is_empty() {
                             println!("No chat history available.");
+                            None
                         } else {
                             for msg in res {
                                 let sender = if msg.from_uid == friend.id {
@@ -218,19 +242,23 @@ async fn fetch_history(friend: &Friend) {
                                     msg.msg
                                 );
                             }
+                            Some(res.last()?.mid)
                         }
                     }
                     Err(err) => {
                         println!("Failed to parse chat history:{}", err);
+                        None
                     }
                 }
             }
             _ => {
                 println!("Failed to get chat history:{}", res.status());
+                None
             }
         },
         Err(err) => {
             println!("Failed to get chat history:{}", err);
+            None
         }
     }
 }
