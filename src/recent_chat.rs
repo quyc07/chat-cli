@@ -34,8 +34,8 @@ pub(crate) async fn recent_chat() {
                         } => {
                             delimiter();
                             match unread {
-                                None => (format!("好友: {}\n时间: {}\n{}", user_name, msg_time, msg), (Some(uid), None, user_name)),
-                                Some(unread) => (format!("好友: {}\n时间: {}\n{}\n未读: {}", user_name, msg_time, msg, unread), (Some(uid), None, user_name)),
+                                None => (format!("好友: {}\n  时间: {}\n  {}", user_name, msg_time, msg), (Some(uid), None, user_name)),
+                                Some(unread) => (format!("好友: {}\n  时间: {}\n  {}\n  未读: {}", user_name, msg_time, msg, unread), (Some(uid), None, user_name)),
                             }
                         }
                         ChatVo::Group {
@@ -50,8 +50,8 @@ pub(crate) async fn recent_chat() {
                         } => {
                             delimiter();
                             match unread {
-                                None => (format!("群: {}\n时间: {}\n{}: {}", group_name, msg_time, user_name, msg), (None, Some(gid), group_name)),
-                                Some(unread) => (format!("群: {}\n时间: {}\n{}: {}\n未读: {}", user_name, msg_time, user_name, msg, unread), (None, Some(gid), group_name)),
+                                None => (format!("群: {}\n  时间: {}\n  {}: {}", group_name, msg_time, user_name, msg), (None, Some(gid), group_name)),
+                                Some(unread) => (format!("群: {}\n  时间: {}\n  {}: {}\n  未读: {}", user_name, msg_time, user_name, msg, unread), (None, Some(gid), group_name)),
                             }
                         }
                     }

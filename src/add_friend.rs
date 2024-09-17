@@ -1,10 +1,13 @@
+use crate::datetime::datetime_format;
 use crate::token::CURRENT_USER;
 use crate::{style, HOST};
+use chrono::{DateTime, Local};
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::Input;
+use dialoguer::{Confirm, Input};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 pub(crate) async fn add_friend_select() {
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
@@ -26,13 +29,121 @@ pub(crate) async fn add_friend_select() {
     }
 }
 
+#[derive(Deserialize)]
+struct FriendReqVo {
+    id: i32,
+    request_id: i32,
+    request_name: String,
+    #[serde(with = "datetime_format")]
+    create_time: DateTime<Local>,
+    reason: Option<String>,
+    status: FriendRequestStatus,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FriendRequestStatus {
+    WAIT,
+    APPROVE,
+    REJECT,
+}
+
+impl Display for FriendRequestStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FriendRequestStatus::WAIT => "待处理",
+                FriendRequestStatus::APPROVE => "已同意",
+                FriendRequestStatus::REJECT => "已拒绝",
+            }
+        )
+    }
+}
+
 async fn friend_request() {
-    todo!()
+    let url = format!("{HOST}/friend/req");
+    let res = Client::new()
+        .get(url)
+        .header(
+            "Authorization",
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
+        )
+        .send()
+        .await;
+    match res {
+        Ok(res) => {
+            if res.status().is_success() {
+                match res.json::<Vec<FriendReqVo>>().await {
+                    Ok(friend_reqs) => {
+                        let option_2_id = friend_reqs.into_iter().map(|req| {
+                            (format!("姓名：{}\n  {}\n  {}", req.request_name, req.reason.clone().unwrap_or("请求添加好友".to_string()), req.status), req)
+                        }).collect::<HashMap<String, FriendReqVo>>();
+                        let options = option_2_id.keys().map(|x| x.clone()).collect::<Vec<_>>();
+                        let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
+                            .with_prompt("好友申请列表")
+                            .items(&options)
+                            .interact()
+                            .unwrap();
+                        let req = option_2_id.get(&options[selection]).unwrap();
+                        if req.status == FriendRequestStatus::WAIT {
+                            if Confirm::with_theme(&ColorfulTheme::default())
+                                .with_prompt("同意好友申请么？")
+                                .interact()
+                                .unwrap()
+                            {
+                                review(&req.id, FriendRequestStatus::APPROVE).await;
+                            } else {
+                                review(&req.id, FriendRequestStatus::REJECT).await;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Failed to parse response: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            println!("Failed to get friend request: {}", err);
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn review(id: &i32, status: FriendRequestStatus) {
+    let url = format!("{HOST}/friend/req");
+    let res = Client::new()
+        .post(url)
+        .header(
+            "Authorization",
+            format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
+        )
+        .json(&serde_json::json!({
+                                    "id": id,
+                                    "status": status,
+                                }))
+        .send()
+        .await;
+    match res {
+        Ok(res) => {
+            if res.status().is_success() {
+                println!("操作成功");
+            } else {
+                println!("操作失败: {}", res.text().await.unwrap());
+            }
+        }
+        Err(err) => {
+            println!("Failed to send request: {}", err);
+            std::process::exit(1);
+        }
+    }
 }
 
 pub(crate) async fn add_friend() {
     let name: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Friend name")
+        .with_prompt("好友名称")
         .interact_text()
         .unwrap();
     style::loading(format!("搜索好友: {}", name));
