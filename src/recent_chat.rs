@@ -6,6 +6,7 @@ use chrono::{DateTime, Local};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use indexmap::IndexMap;
 
 pub(crate) async fn recent_chat() {
     delimiter();
@@ -22,7 +23,7 @@ pub(crate) async fn recent_chat() {
         if res.status().is_success() {
             let res = res.json::<Vec<ChatVo>>().await;
             if let Ok(chatVos) = res {
-                let select_to_id: HashMap<String, (Option<i32>, Option<i32>, String)> = chatVos.into_iter().map(|chat_vo| {
+                let select_to_id: IndexMap<String, (Option<i32>, Option<i32>, String)> = chatVos.into_iter().map(|chat_vo| {
                     match chat_vo {
                         ChatVo::User {
                             uid,

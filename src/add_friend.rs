@@ -8,6 +8,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use indexmap::IndexMap;
 
 pub(crate) async fn add_friend_select() {
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
@@ -77,8 +78,8 @@ async fn friend_request() {
                 match res.json::<Vec<FriendReqVo>>().await {
                     Ok(friend_reqs) => {
                         let option_2_id = friend_reqs.into_iter().map(|req| {
-                            (format!("姓名：{}\n  {}\n  {}", req.request_name, req.reason.clone().unwrap_or("请求添加好友".to_string()), req.status), req)
-                        }).collect::<HashMap<String, FriendReqVo>>();
+                            (format!("姓名：{}\n  备注：{}\n  {}", req.request_name, req.reason.clone().unwrap_or("请求添加好友".to_string()), req.status), req)
+                        }).collect::<IndexMap<String, FriendReqVo>>();
                         let options = option_2_id.keys().map(|x| x.clone()).collect::<Vec<_>>();
                         let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
                             .with_prompt("好友申请列表")
@@ -149,7 +150,7 @@ pub(crate) async fn add_friend() {
     style::loading(format!("搜索好友: {}", name));
     match find_friend(name).await {
         Ok(friends) => {
-            let name_2_id = friends.into_iter().map(|friend| (friend.name, friend.id)).collect::<HashMap<String, i32>>();
+            let name_2_id = friends.into_iter().map(|friend| (friend.name, friend.id)).collect::<IndexMap<String, i32>>();
             let names = name_2_id.keys().map(|name| name.as_str()).collect::<Vec<_>>();
             let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
                 .with_prompt("请选择添加哪个好友")
