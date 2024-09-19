@@ -59,15 +59,20 @@ pub(crate) async fn find_friends() {
 
 pub(crate) async fn select_friend(friends: Vec<Friend>) {
     let friend_names: Vec<&str> = friends.iter().map(|f| f.name.as_str()).collect();
-    let selection = dialoguer::Select::new()
+    match dialoguer::Select::new()
         .with_prompt(MainSelect::ChatWithFriends.to_str())
         .items(&friend_names)
-        .interact()
-        .unwrap();
-
-    let selected_friend = &friends[selection];
-    delimiter();
-    chat_with_friend(selected_friend).await;
+        .interact() {
+        Ok(selection) => {
+            let selected_friend = &friends[selection];
+            delimiter();
+            chat_with_friend(selected_friend).await;
+        }
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            std::process::exit(1);
+        }
+    };
 }
 
 pub(crate) async fn chat_with_friend(selected_friend: &Friend) {
@@ -388,7 +393,6 @@ pub struct MessageContent {
     /// Content
     pub(crate) content: String,
 }
-
 
 
 #[cfg(test)]
