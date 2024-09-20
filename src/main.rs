@@ -7,11 +7,15 @@ mod recent_chat;
 mod console;
 mod add_friend;
 mod style;
+mod config;
 
+use crate::config::Settings;
 use clap::{Parser, Subcommand};
 use futures::StreamExt;
 use reqwest;
 use serde::Deserialize;
+use std::fmt::Display;
+use std::sync::LazyLock;
 use tokio::io::AsyncBufReadExt;
 
 // 分隔符
@@ -21,7 +25,22 @@ pub(crate) fn delimiter() {
     println!("{DELIMITER}");
 }
 
-pub const HOST: &str = "http://127.0.0.1:3000";
+static HOST: HostConfig = HostConfig(LazyLock::new(|| {
+    if cfg!(feature = "release") {
+        Settings::new("release").unwrap()
+    } else {
+        Settings::new("dev").unwrap()
+    }
+}));
+
+struct HostConfig(LazyLock<Settings>);
+
+impl Display for HostConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.host.server)
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
