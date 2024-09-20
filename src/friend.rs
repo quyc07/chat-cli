@@ -3,13 +3,14 @@ use crate::main_select::MainSelect;
 use crate::token::CURRENT_USER;
 use crate::{delimiter, HOST};
 use chrono::{DateTime, Local};
+use crossterm::terminal::ClearType::CurrentLine;
+use crossterm::{cursor, execute, terminal};
 use futures::StreamExt;
 use regex::Regex;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::io::{stdout, Write};
-use termion::raw::IntoRawMode;
 use tokio::io::AsyncBufReadExt;
 
 
@@ -142,7 +143,8 @@ async fn chat(friend: &Friend) {
                                         &friend.name
                                     } else {
                                         // 清空用户输入的那一行
-                                        write!(stdout(), "{}{}", termion::cursor::Up(1),termion::clear::CurrentLine).unwrap();
+                                        execute!(stdout(),cursor::MoveUp(1)).unwrap();
+                                        execute!(stdout(),terminal::Clear(CurrentLine)).unwrap();
                                         "You"
                                     };
                                     println!("[{}] {}: {}",

@@ -1,12 +1,10 @@
 use std::io::{stdout, Write};
 
+use crossterm::{
+    execute,
+    terminal::{Clear, ClearType},
+};
+
 pub(crate) fn clean_all() {
-    let mut stdout = stdout();
-    write!(
-        stdout,
-        "{}{}",
-        termion::clear::All,
-        termion::cursor::Goto(1, 1)
-    ).unwrap();
-    stdout.flush().unwrap();
+    execute!(stdout(), Clear(ClearType::All)).unwrap();
 }
