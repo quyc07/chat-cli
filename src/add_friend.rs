@@ -165,6 +165,7 @@ pub(crate) async fn add_friend() {
                     "Authorization",
                     format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
                 )
+                .json(&serde_json::json!({}))
                 .send()
                 .await;
             match res {

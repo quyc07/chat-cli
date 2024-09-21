@@ -25,21 +25,10 @@ pub(crate) fn delimiter() {
     println!("{DELIMITER}");
 }
 
-static HOST: HostConfig = HostConfig(LazyLock::new(|| {
-    if cfg!(feature = "release") {
-        Settings::new("release").unwrap()
-    } else {
-        Settings::new("dev").unwrap()
-    }
-}));
-
-struct HostConfig(LazyLock<Settings>);
-
-impl Display for HostConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.host.server)
-    }
-}
+#[cfg(feature = "release")]
+static HOST: &str = include_str!("../config/release");
+#[cfg(not(feature = "release"))]
+static HOST: &str = "http://localhost:3000";
 
 #[tokio::main]
 async fn main() {
