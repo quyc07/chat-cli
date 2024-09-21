@@ -4,11 +4,10 @@ use crate::{style, HOST};
 use chrono::{DateTime, Local};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, Input};
+use indexmap::IndexMap;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use indexmap::IndexMap;
 
 pub(crate) async fn add_friend_select() {
     let selection = dialoguer::Select::with_theme(&ColorfulTheme::default())
@@ -76,7 +75,7 @@ async fn friend_request() {
         Ok(res) => {
             if res.status().is_success() {
                 match res.json::<Vec<FriendReqVo>>().await {
-                    Ok(friend_reqs) => {
+                    Ok(friend_reqs) if !friend_reqs.is_empty() => {
                         let option_2_id = friend_reqs.into_iter().map(|req| {
                             (format!("姓名：{}\n  备注：{}\n  {}", req.request_name, req.reason.clone().unwrap_or("请求添加好友".to_string()), req.status), req)
                         }).collect::<IndexMap<String, FriendReqVo>>();
@@ -98,6 +97,10 @@ async fn friend_request() {
                                 review(&req.id, FriendRequestStatus::REJECT).await;
                             }
                         }
+                    }
+                    Ok(_) => {
+                        println!("暂无好友申请");
+                        std::process::exit(1);
                     }
                     Err(e) => {
                         println!("Failed to parse response: {}", e);

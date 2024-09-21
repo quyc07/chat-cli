@@ -31,31 +31,32 @@ pub(crate) async fn find_friends() {
         )
         .send()
         .await;
-    let friends = match response {
+    match response {
         Ok(res) => {
             if res.status().is_success() {
                 match res.json::<Vec<Friend>>().await {
-                    Ok(friends) => Some(friends),
+                    Ok(friends) if !friends.is_empty() => {
+                        select_friend(friends).await;
+                    }
+                    Ok(_) => {
+                        println!("暂无好友");
+                        std::process::exit(1);
+                    }
                     Err(e) => {
                         println!("Failed to read response: {}", e);
-                        None
+                        std::process::exit(1);
                     }
                 }
             } else {
                 println!("Failed to get friends list: HTTP {}", res.status());
-                None
+                std::process::exit(1);
             }
         }
         Err(e) => {
             println!("Failed to send request: {}", e);
-            None
+            std::process::exit(1);
         }
     };
-    if friends.is_none() {
-        println!("Get friends failed. Exiting the program.");
-        std::process::exit(1);
-    }
-    select_friend(friends.unwrap()).await;
 }
 
 pub(crate) async fn select_friend(friends: Vec<Friend>) {
@@ -156,7 +157,6 @@ async fn chat(friend: &Friend) {
                                     stdout().flush().unwrap();
                                 }
                                 Ok(Message::Heartbeat(_)) => {
-                                    // todo!();
                                     // println!("Heartbeat received: {:?}", heartbeat_message);
                                 }
                                 Err(err) => {

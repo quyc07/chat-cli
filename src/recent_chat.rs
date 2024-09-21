@@ -75,8 +75,12 @@ pub(crate) async fn recent_chat() {
                         }
                     };
                 }
-                _ => {
+                Ok(_) => {
                     println!("暂无聊天记录");
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    println!("Fail to get recent chat, {e}");
                     std::process::exit(1);
                 }
             }

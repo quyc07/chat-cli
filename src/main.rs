@@ -7,15 +7,11 @@ mod recent_chat;
 mod console;
 mod add_friend;
 mod style;
-mod config;
-
-use crate::config::Settings;
 use clap::{Parser, Subcommand};
 use futures::StreamExt;
 use reqwest;
 use serde::Deserialize;
 use std::fmt::Display;
-use std::sync::LazyLock;
 use tokio::io::AsyncBufReadExt;
 
 // 分隔符
