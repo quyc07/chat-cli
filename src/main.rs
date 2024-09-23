@@ -29,10 +29,11 @@ static HOST: &str = "http://localhost:3000";
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    match cli.command {
+    let _ = match cli.command {
         Commands::Register { name, password } => user::register(name, password).await,
         Commands::Login { name, password } => user::login(name, password).await,
-    }
+    };
+
 }
 
 #[derive(Parser)]
@@ -47,10 +48,10 @@ enum Commands {
     /// 注册用户
     Register {
         /// 用户名
-        #[arg(short, long, value_parser = check_name)]
+        #[arg(short='n', long, value_parser = check_name)]
         name: String,
         /// 密码
-        #[arg(short, long, value_parser = check_password)]
+        #[arg(short='p', long, value_parser = check_password)]
         password: String,
     },
     /// 登陆
