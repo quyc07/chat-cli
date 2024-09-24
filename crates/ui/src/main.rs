@@ -1,34 +1,18 @@
 mod login;
+mod user_input;
 
+use crate::login::Login;
 use color_eyre::owo_colors::OwoColorize;
 use color_eyre::{eyre::Context, Result};
-use crossterm::event::KeyEventKind;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode}
-    ,
-    DefaultTerminal,
-};
 
 fn main() -> Result<()> {
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let app_result = run(terminal).context("app loop failed");
+    let app_result = Login::new().run(terminal).context("app loop failed");
     ratatui::restore();
     app_result
 }
-
-fn run(mut terminal: DefaultTerminal) -> Result<()> {
-    loop {
-        terminal.draw(login::login)?;
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                break Ok(());
-            }
-        }
-    }
-}
-
 
 // ANCHOR: centered_rect
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
