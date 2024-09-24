@@ -1,10 +1,16 @@
 mod login;
 mod user_input;
+mod token;
 
 use crate::login::Login;
 use color_eyre::owo_colors::OwoColorize;
 use color_eyre::{eyre::Context, Result};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
+
+#[cfg(feature = "release")]
+static HOST: &str = include_str!("../config/release");
+#[cfg(not(feature = "release"))]
+static HOST: &str = "http://localhost:3000";
 
 fn main() -> Result<()> {
     color_eyre::install()?;

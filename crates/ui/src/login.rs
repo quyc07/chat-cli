@@ -1,5 +1,7 @@
+use crate::token::CURRENT_USER;
 use crate::user_input::{Input, InputMode};
-use crate::centered_rect;
+use crate::HOST;
+use crate::{centered_rect, token};
 use color_eyre::Result;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
@@ -7,6 +9,12 @@ use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Span, Style, Stylize, Text};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{DefaultTerminal, Frame};
+use reqwest::blocking::Client;
+use reqwest::StatusCode;
+use serde::Deserialize;
+use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
 
 pub struct Login {
     username: Input,
@@ -193,7 +201,96 @@ impl Login {
 }
 
 fn do_login(login: &Login) -> Result<()> {
+    let login_url = format!("{HOST}/token/login");
+    let client = Client::new();
+    let response = client
+        .post(&login_url)
+        .json(&serde_json::json!({
+            "name": login.username.input,
+            "password": login.password.input
+        }))
+        .send();
+    let token = match response {
+        Ok(res) => {
+            if res.status().is_success() {
+                match res.json::<LoginRes>() {
+                    Ok(LoginRes { access_token }) => {
+                        Some(access_token)
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to parse response: {}", e);
+                        None
+                    }
+                }
+            } else if res.status() == StatusCode::UNAUTHORIZED {
+                println!("Login failed: 用户名或密码错误");
+                None
+            } else {
+                println!("Login failed: HTTP {}", res.status());
+                None
+            }
+        }
+        Err(e) => {
+            println!("Failed to send login request: {}", e);
+            None
+        }
+    };
+
+    if token.is_none() {
+        eprintln!("Login failed. Exiting the program.");
+        // TODO 登陆失败，不退出程序，如何弹出提示信息
+        std::process::exit(1);
+    }
+    let token = token.unwrap();
+    let user = token::parse_token(token.as_str()).unwrap().claims;
+    {
+        let mut guard = CURRENT_USER.lock().unwrap();
+        guard.user = user; // Create a longer-lived binding
+        guard.token = token; // Create a longer-lived binding
+    }
+    let token = format!("Bearer {}", CURRENT_USER.lock().unwrap().token);
+    // 启动异步线程，定时刷新token过期时间
+    thread::spawn(move|| {
+        loop {
+            let renew_token_period = Duration::from_secs(60);
+            sleep(renew_token_period);
+            let renew_url = format!("{HOST}/token/renew");
+            let client = Client::new();
+            let response = client
+                .patch(renew_url)
+                .header("Authorization", token.clone())
+                .send();
+            match response {
+                Ok(res) => {
+                    if res.status().is_success() {
+                        match res.text() {
+                            Ok(t) => {
+                                let token_data = token::parse_token(t.as_str()).unwrap();
+                                let mut guard = CURRENT_USER.lock().unwrap();
+                                guard.user = token_data.claims;
+                                guard.token = t;
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to parse response: {}", e);
+                            }
+                        }
+                    } else {
+                        eprintln!("Token refresh failed: HTTP {}", res.status());
+                    }
+                }
+                Err(err) => {
+                    eprintln!("Failed to send token refresh request: {}", err);
+                }
+            }
+        }
+    });
+    // TODO 登陆后进入最近聊天页面
     Ok(())
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LoginRes {
+    pub access_token: String,
 }
 
 #[derive(Eq, PartialEq)]
