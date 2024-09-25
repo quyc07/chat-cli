@@ -27,16 +27,6 @@
 //
 // See also https://github.com/rhysd/tui-textarea and https://github.com/sayanarijit/tui-input/
 
-use color_eyre::Result;
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{Constraint, Layout, Position},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Span, Text},
-    widgets::{Block, List, ListItem, Paragraph},
-    DefaultTerminal, Frame,
-};
-
 /// App holds the state of the application
 pub struct Input {
     /// Current value of the input box
@@ -44,21 +34,22 @@ pub struct Input {
     /// Position of cursor in the editor area.
     pub(crate) character_index: usize,
     /// Current input mode
-    pub(crate) input_mode: InputMode,
+    pub(crate) current_mode: CurrentMode,
     /// History of recorded messages
     pub(crate) messages: Vec<String>,
 }
 
-pub(crate) enum InputMode {
+pub(crate) enum CurrentMode {
     Normal,
     Editing,
+    Alerting,
 }
 
 impl Input {
     pub(crate) const fn new() -> Self {
         Self {
             input: String::new(),
-            input_mode: InputMode::Normal,
+            current_mode: CurrentMode::Normal,
             messages: Vec::new(),
             character_index: 0,
         }
@@ -122,109 +113,10 @@ impl Input {
         self.character_index = 0;
     }
 
-    pub(crate)  fn submit_message(&mut self) {
+    pub(crate) fn submit_message(&mut self) {
         self.messages.push(self.input.clone());
         self.input.clear();
         self.reset_cursor();
     }
 
-    pub(crate)  fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        loop {
-            terminal.draw(|frame| self.draw(frame))?;
-
-            if let Event::Key(key) = event::read()? {
-                match self.input_mode {
-                    InputMode::Normal => match key.code {
-                        KeyCode::Char('e') => {
-                            self.input_mode = InputMode::Editing;
-                        }
-                        KeyCode::Char('q') => {
-                            return Ok(());
-                        }
-                        _ => {}
-                    },
-                    InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
-                        KeyCode::Enter => self.submit_message(),
-                        KeyCode::Char(to_insert) => self.enter_char(to_insert),
-                        KeyCode::Backspace => self.delete_char(),
-                        KeyCode::Left => self.move_cursor_left(),
-                        KeyCode::Right => self.move_cursor_right(),
-                        KeyCode::Esc => self.input_mode = InputMode::Normal,
-                        _ => {}
-                    },
-                    InputMode::Editing => {}
-                }
-            }
-        }
-    }
-
-    pub(crate) fn draw(&self, frame: &mut Frame) {
-        let vertical = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(3),
-            Constraint::Min(1),
-        ]);
-        let [help_area, input_area, messages_area] = vertical.areas(frame.area());
-
-        let (msg, style) = match self.input_mode {
-            InputMode::Normal => (
-                vec![
-                    "Press ".into(),
-                    "q".bold(),
-                    " to exit, ".into(),
-                    "e".bold(),
-                    " to start editing.".bold(),
-                ],
-                Style::default().add_modifier(Modifier::RAPID_BLINK),
-            ),
-            InputMode::Editing => (
-                vec![
-                    "Press ".into(),
-                    "Esc".bold(),
-                    " to stop editing, ".into(),
-                    "Enter".bold(),
-                    " to record the message".into(),
-                ],
-                Style::default(),
-            ),
-        };
-        let text = Text::from(Line::from(msg)).patch_style(style);
-        let help_message = Paragraph::new(text);
-        frame.render_widget(help_message, help_area);
-
-        let input = Paragraph::new(self.input.as_str())
-            .style(match self.input_mode {
-                InputMode::Normal => Style::default(),
-                InputMode::Editing => Style::default().fg(Color::Yellow),
-            })
-            .block(Block::bordered().title("Input"));
-        frame.render_widget(input, input_area);
-        match self.input_mode {
-            // Hide the cursor. `Frame` does this by default, so we don't need to do anything here
-            InputMode::Normal => {}
-
-            // Make the cursor visible and ask ratatui to put it at the specified coordinates after
-            // rendering
-            #[allow(clippy::cast_possible_truncation)]
-            InputMode::Editing => frame.set_cursor_position(Position::new(
-                // Draw the cursor at the current position in the input field.
-                // This position is can be controlled via the left and right arrow key
-                input_area.x + self.character_index as u16 + 1,
-                // Move one line down, from the border to the input line
-                input_area.y + 1,
-            )),
-        }
-
-        let messages: Vec<ListItem> = self
-            .messages
-            .iter()
-            .enumerate()
-            .map(|(i, m)| {
-                let content = Line::from(Span::raw(format!("{i}: {m}")));
-                ListItem::new(content)
-            })
-            .collect();
-        let messages = List::new(messages).block(Block::bordered().title("Messages"));
-        frame.render_widget(messages, messages_area);
-    }
 }

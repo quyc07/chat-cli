@@ -1,7 +1,8 @@
 use crate::token::CURRENT_USER;
-use crate::user_input::{Input, InputMode};
+use crate::user_input::{CurrentMode, Input};
 use crate::HOST;
 use crate::{centered_rect, token};
+use color_eyre::eyre::format_err;
 use color_eyre::Result;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
@@ -19,10 +20,10 @@ use std::time::Duration;
 pub struct Login {
     username: Input,
     password: Input,
-    input_mode: InputMode,
+    current_mode: CurrentMode,
     currently_editing: Option<CurrentlyEditing>,
+    error_message: Option<String>, // 添加错误消息字段
 }
-
 
 impl Login {
     pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
@@ -32,21 +33,21 @@ impl Login {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
-                match self.input_mode {
-                    InputMode::Normal => match key.code {
+                match self.current_mode {
+                    CurrentMode::Normal => match key.code {
                         KeyCode::Char('q') => {
                             return Ok(());
                         }
                         KeyCode::Enter => {
-                            return do_login(self);
+                            login(self);
                         }
                         KeyCode::Char('e') => {
-                            self.input_mode = InputMode::Editing;
+                            self.current_mode = CurrentMode::Editing;
                             self.currently_editing = Some(CurrentlyEditing::Username);
                         }
                         _ => {}
                     }
-                    InputMode::Editing => {
+                    CurrentMode::Editing => {
                         match self.currently_editing {
                             None => {}
                             Some(CurrentlyEditing::Username) => {
@@ -55,7 +56,7 @@ impl Login {
                                     KeyCode::Backspace => self.username.delete_char(),
                                     KeyCode::Left => self.username.move_cursor_left(),
                                     KeyCode::Right => self.username.move_cursor_right(),
-                                    KeyCode::Esc => self.input_mode = InputMode::Normal,
+                                    KeyCode::Esc => self.current_mode = CurrentMode::Normal,
                                     KeyCode::Enter => {
                                         self.toggle_editing();
                                     }
@@ -68,10 +69,19 @@ impl Login {
                                     KeyCode::Backspace => self.password.delete_char(),
                                     KeyCode::Left => self.password.move_cursor_left(),
                                     KeyCode::Right => self.password.move_cursor_right(),
-                                    KeyCode::Esc | KeyCode::Enter => self.input_mode = InputMode::Normal,
+                                    KeyCode::Esc | KeyCode::Enter => self.current_mode = CurrentMode::Normal,
                                     _ => {}
                                 }
                             }
+                        }
+                    }
+                    CurrentMode::Alerting => {
+                        match key.code {
+                            KeyCode::Esc => {
+                                self.error_message = None;
+                                self.current_mode = CurrentMode::Normal;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -83,12 +93,13 @@ impl Login {
         Self {
             username: Input::new(),
             password: Input::new(),
-            input_mode: InputMode::Normal,
+            current_mode: CurrentMode::Normal,
             currently_editing: None,
+            error_message: None, // 初始化错误消息
         }
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let bg_block = Block::default()
             .borders(Borders::ALL)
             .style(Style::default().fg(Color::Green));
@@ -96,7 +107,7 @@ impl Login {
         let area = Rect::new(0, 0, frame.area().width * 6 / 10, frame.area().height);
         frame.render_widget(bg_block, area);
 
-        let [cli_name_area, help_area, user_name_area, password_area, button_area, _] = Layout::default()
+        let [cli_name_area, help_area, mut user_name_area, mut password_area, button_area, _] = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(1),
@@ -121,8 +132,8 @@ impl Login {
 
         frame.render_widget(cli_name, centered_rect(50, 50, cli_name_area));
 
-        let (msg, style) = match self.input_mode {
-            InputMode::Normal => (
+        let (msg, style) = match self.current_mode {
+            CurrentMode::Normal => (
                 vec![
                     "Press ".into(),
                     "q".bold(),
@@ -134,7 +145,7 @@ impl Login {
                 ],
                 Style::default().add_modifier(Modifier::RAPID_BLINK),
             ),
-            InputMode::Editing => (
+            CurrentMode::Editing => (
                 vec![
                     "Press ".into(),
                     "Esc".bold(),
@@ -144,32 +155,40 @@ impl Login {
                 ],
                 Style::default(),
             ),
+            CurrentMode::Alerting => (
+                vec!["Press ".into(),
+                     "Esc".bold(),
+                     " to stop editing, ".into()],
+                Style::default()
+            ),
         };
 
         let text = Text::from(Line::from(msg)).patch_style(style);
         let help_message = Paragraph::new(text)
             .wrap(ratatui::widgets::Wrap { trim: true }); // 添加自动换行
-        frame.render_widget(help_message, centered_rect(70,100,help_area));
+        frame.render_widget(help_message, centered_rect(70, 100, help_area));
 
         let user_name = Paragraph::new(self.username.input.as_str())
-            .style(match self.input_mode {
-                InputMode::Editing if self.currently_editing == Some(CurrentlyEditing::Username) => Style::default().fg(Color::Yellow),
+            .style(match self.current_mode {
+                CurrentMode::Editing if self.currently_editing == Some(CurrentlyEditing::Username) => Style::default().fg(Color::Yellow),
                 _ => Style::default(),
             })
             .block(Block::bordered().title("Username"));
-        frame.render_widget(user_name, centered_rect(70, 100, user_name_area));
+        user_name_area = centered_rect(70, 100, user_name_area);
+        frame.render_widget(user_name, user_name_area);
 
         let password = Paragraph::new(self.password.input.as_str())
-            .style(match self.input_mode {
-                InputMode::Editing if self.currently_editing == Some(CurrentlyEditing::Password) => Style::default().fg(Color::Yellow),
+            .style(match self.current_mode {
+                CurrentMode::Editing if self.currently_editing == Some(CurrentlyEditing::Password) => Style::default().fg(Color::Yellow),
                 _ => Style::default(),
             })
             .block(Block::bordered().title("Password"));
-        frame.render_widget(password, centered_rect(70, 100, password_area));
+        password_area = centered_rect(70, 100, password_area);
+        frame.render_widget(password, password_area);
 
-        match self.input_mode {
-            InputMode::Normal => {}
-            InputMode::Editing => {
+        match self.current_mode {
+            CurrentMode::Normal => {}
+            CurrentMode::Editing => {
                 match self.currently_editing {
                     None => {}
                     Some(CurrentlyEditing::Username) => {
@@ -180,12 +199,24 @@ impl Login {
                     }
                 }
             }
+            CurrentMode::Alerting => {}
         }
 
         let login = Paragraph::new(Text::styled("Login", Style::default()))
             .block(Block::default().borders(Borders::ALL))
             .centered();
         frame.render_widget(login, centered_rect(50, 100, button_area));
+
+        let error_area = Rect::new(area.width * 2 / 10, (area.height - 2) / 2, area.width * 6 / 10, 3); // 新增代码
+        // let error_area = centered_rect(60, 25, area);
+        // 绘制错误消息
+        if let Some(message) = &self.error_message {
+            let error_paragraph = Paragraph::new(message.as_str())
+                .style(Style::default().fg(Color::Red))
+                .block(Block::default().title("Error | Esc to close this msg").borders(Borders::ALL));
+            frame.render_widget(error_paragraph, error_area); // 选择合适的区域
+            self.current_mode = CurrentMode::Alerting;
+        }
     }
 
     pub fn toggle_editing(&mut self) {
@@ -200,7 +231,26 @@ impl Login {
     }
 }
 
-fn do_login(login: &Login) -> Result<()> {
+fn login(login: &mut Login) {
+    match do_login(&login) {
+        Ok(token) => {
+            let user = token::parse_token(token.as_str()).unwrap().claims;
+            {
+                let mut guard = CURRENT_USER.lock().unwrap();
+                guard.user = user; // Create a longer-lived binding
+                guard.token = token; // Create a longer-lived binding
+            }
+            let token = format!("Bearer {}", CURRENT_USER.lock().unwrap().token);
+            renew(token);
+            // TODO 登陆后进入最近聊天页面
+        }
+        Err(err) => {
+            login.error_message = Some(format!("Login failed: {}", err)); // 设置错误消息
+        }
+    }
+}
+
+fn do_login(login: &&mut Login) -> Result<String> {
     let login_url = format!("{HOST}/token/login");
     let client = Client::new();
     let response = client
@@ -210,47 +260,32 @@ fn do_login(login: &Login) -> Result<()> {
             "password": login.password.input
         }))
         .send();
-    let token = match response {
+    match response {
         Ok(res) => {
             if res.status().is_success() {
                 match res.json::<LoginRes>() {
                     Ok(LoginRes { access_token }) => {
-                        Some(access_token)
+                        Ok(access_token)
                     }
                     Err(e) => {
-                        eprintln!("Failed to parse response: {}", e);
-                        None
+                        Err(format_err!("Failed to parse response: {}", e))
                     }
                 }
             } else if res.status() == StatusCode::UNAUTHORIZED {
-                println!("Login failed: 用户名或密码错误");
-                None
+                Err(format_err!("Login failed: 用户名或密码错误"))
             } else {
-                println!("Login failed: HTTP {}", res.status());
-                None
+                Err(format_err!("Login failed: HTTP {}", res.status()))
             }
         }
         Err(e) => {
-            println!("Failed to send login request: {}", e);
-            None
+            Err(format_err!("Failed to send login request: {}", e))
         }
-    };
+    }
+}
 
-    if token.is_none() {
-        eprintln!("Login failed. Exiting the program.");
-        // TODO 登陆失败，不退出程序，如何弹出提示信息
-        std::process::exit(1);
-    }
-    let token = token.unwrap();
-    let user = token::parse_token(token.as_str()).unwrap().claims;
-    {
-        let mut guard = CURRENT_USER.lock().unwrap();
-        guard.user = user; // Create a longer-lived binding
-        guard.token = token; // Create a longer-lived binding
-    }
-    let token = format!("Bearer {}", CURRENT_USER.lock().unwrap().token);
+fn renew(token: String) {
     // 启动异步线程，定时刷新token过期时间
-    thread::spawn(move|| {
+    thread::spawn(move || {
         loop {
             let renew_token_period = Duration::from_secs(60);
             sleep(renew_token_period);
@@ -284,8 +319,6 @@ fn do_login(login: &Login) -> Result<()> {
             }
         }
     });
-    // TODO 登陆后进入最近聊天页面
-    Ok(())
 }
 
 #[derive(Deserialize)]
