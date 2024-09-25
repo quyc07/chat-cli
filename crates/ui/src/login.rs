@@ -1,3 +1,4 @@
+use crate::recent_chat::RecentChat;
 use crate::token::CURRENT_USER;
 use crate::user_input::{CurrentMode, Input};
 use crate::HOST;
@@ -39,7 +40,17 @@ impl Login {
                             return Ok(());
                         }
                         KeyCode::Enter => {
-                            login(self);
+                            match login(self) {
+                                Ok(_) => {
+                                    // 登陆后进入最近聊天页面
+                                    let mut recent_chat = RecentChat::new();
+                                    recent_chat.run(&mut terminal)?;
+                                }
+                                Err(err) => {
+                                    self.error_message = Some(err.to_string());
+                                    self.current_mode = CurrentMode::Alerting;
+                                }
+                            }
                         }
                         KeyCode::Char('e') => {
                             self.current_mode = CurrentMode::Editing;
@@ -231,7 +242,7 @@ impl Login {
     }
 }
 
-fn login(login: &mut Login) {
+fn login(login: &mut Login) -> Result<()> {
     match do_login(&login) {
         Ok(token) => {
             let user = token::parse_token(token.as_str()).unwrap().claims;
@@ -242,10 +253,10 @@ fn login(login: &mut Login) {
             }
             let token = format!("Bearer {}", CURRENT_USER.lock().unwrap().token);
             renew(token);
-            // TODO 登陆后进入最近聊天页面
+            Ok(())
         }
         Err(err) => {
-            login.error_message = Some(format!("Login failed: {}", err)); // 设置错误消息
+            Err(err)
         }
     }
 }
