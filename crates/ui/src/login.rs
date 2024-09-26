@@ -8,7 +8,7 @@ use color_eyre::Result;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
-use ratatui::prelude::{Color, Line, Modifier, Span, Style, Stylize, Text};
+use ratatui::prelude::{Color, Line, Modifier, Style, Stylize, Text};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{DefaultTerminal, Frame};
 use reqwest::blocking::Client;
@@ -130,18 +130,21 @@ impl Login {
             ])
             .areas(area);
 
-        let banner = vec![
-            "   ____   _           _       ".to_string(),
-            "  / ___| | |__   __ _| |__".to_string(),
-            " | |     | '_ \\ / _` | __/".to_string(),
-            " | |___  | | | | (_| | |_".to_string(),
-            "  \\____| |_| |_|\\__,_|___\\".to_string(),
-        ];
+        let banner = r#"
+ ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░░▒▓██████▓▒░▒▓████████▓▒░▒▓██████▓▒░░▒▓█▓▒░      ░▒▓█▓▒░
+░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░
+░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░
+░▒▓█▓▒░      ░▒▓████████▓▒░▒▓████████▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░
+░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░
+░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░  ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░
+ ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ ░▒▓█▓▒░   ░▒▓██████▓▒░░▒▓████████▓▒░▒▓█▓▒░
+        "#;
 
-        let cli_name = Paragraph::new(banner.iter().map(|line| Line::from(Span::styled(line, Style::default().fg(Color::LightCyan)))).collect::<Vec<_>>())
-            .block(Block::default().borders(Borders::NONE));
+        let cli_name = Paragraph::new(banner)
+            .block(Block::default().borders(Borders::NONE))
+            .centered();
 
-        frame.render_widget(cli_name, centered_rect(50, 50, cli_name_area));
+        frame.render_widget(cli_name, centered_rect(100, 50, cli_name_area));
 
         let (msg, style) = match self.current_mode {
             CurrentMode::Normal => (
