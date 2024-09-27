@@ -7,12 +7,12 @@ use std::time::Duration;
 
 // 存储当前用户信息
 pub(crate) static CURRENT_USER: LazyLock<Arc<Mutex<CurrentUser>>, fn() -> Arc<Mutex<CurrentUser>>> = LazyLock::new(|| {
-    return Arc::new(Mutex::new(CurrentUser { user: User::default(), token: "".to_string() }));
+    return Arc::new(Mutex::new(CurrentUser { user: None, token: None }));
 });
 
 pub(crate) struct CurrentUser {
-    pub(crate) user: User,
-    pub(crate) token: String,
+    pub(crate) user: Option<User>,
+    pub(crate) token: Option<String>,
 }
 
 const KEYS: LazyLock<Keys, fn() -> Keys> = LazyLock::new(|| {

@@ -1,8 +1,8 @@
 use crate::recent_chat::RecentChat;
 use crate::token::CURRENT_USER;
 use crate::user_input::{CurrentMode, Input};
-use crate::HOST;
 use crate::{centered_rect, token};
+use crate::{ui, HOST};
 use color_eyre::eyre::format_err;
 use color_eyre::Result;
 use crossterm::event;
@@ -44,7 +44,7 @@ impl Login {
                                 Ok(_) => {
                                     // 登陆后进入最近聊天页面
                                     let mut recent_chat = RecentChat::new();
-                                    recent_chat.run(&mut terminal)?;
+                                    recent_chat.run(&mut terminal,self)?;
                                 }
                                 Err(err) => {
                                     self.error_message = Some(err.to_string());
@@ -115,7 +115,7 @@ impl Login {
             .borders(Borders::ALL)
             .style(Style::default().fg(Color::Green));
 
-        let area = Rect::new(0, 0, frame.area().width * 6 / 10, frame.area().height);
+        let area = ui::total_area(frame);
         frame.render_widget(bg_block, area);
 
         let [cli_name_area, help_area, mut user_name_area, mut password_area, button_area, _] = Layout::default()
@@ -251,11 +251,10 @@ fn login(login: &mut Login) -> Result<()> {
             let user = token::parse_token(token.as_str()).unwrap().claims;
             {
                 let mut guard = CURRENT_USER.lock().unwrap();
-                guard.user = user; // Create a longer-lived binding
-                guard.token = token; // Create a longer-lived binding
+                guard.user = Some(user); // Create a longer-lived binding
+                guard.token = Option::from(token); // Create a longer-lived binding
             }
-            let token = format!("Bearer {}", CURRENT_USER.lock().unwrap().token);
-            renew(token);
+            renew();
             Ok(())
         }
         Err(err) => {
@@ -297,10 +296,15 @@ fn do_login(login: &&mut Login) -> Result<String> {
     }
 }
 
-fn renew(token: String) {
+fn renew() {
     // 启动异步线程，定时刷新token过期时间
     thread::spawn(move || {
         loop {
+            let token = match CURRENT_USER.lock().unwrap().token.clone() {
+                None => { break; }
+                Some(token) => token
+            };
+            let token = format!("Bearer {token}");
             let renew_token_period = Duration::from_secs(60);
             sleep(renew_token_period);
             let renew_url = format!("{HOST}/token/renew");
@@ -316,8 +320,8 @@ fn renew(token: String) {
                             Ok(t) => {
                                 let token_data = token::parse_token(t.as_str()).unwrap();
                                 let mut guard = CURRENT_USER.lock().unwrap();
-                                guard.user = token_data.claims;
-                                guard.token = t;
+                                guard.user = Some(token_data.claims);
+                                guard.token = Some(t);
                             }
                             Err(e) => {
                                 eprintln!("Failed to parse response: {}", e);
