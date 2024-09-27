@@ -44,7 +44,7 @@ impl Login {
                                 Ok(_) => {
                                     // 登陆后进入最近聊天页面
                                     let mut recent_chat = RecentChat::new();
-                                    recent_chat.run(&mut terminal,self)?;
+                                    recent_chat.run(&mut terminal)?;
                                 }
                                 Err(err) => {
                                     self.error_message = Some(err.to_string());

@@ -3,6 +3,7 @@ mod user_input;
 mod token;
 mod recent_chat;
 mod ui;
+mod datetime;
 
 use crate::login::Login;
 use color_eyre::owo_colors::OwoColorize;
