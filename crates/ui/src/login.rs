@@ -1,6 +1,6 @@
 use crate::recent_chat::RecentChat;
 use crate::token::CURRENT_USER;
-use crate::user_input::{CurrentMode, Input};
+use crate::user_input::Input;
 use crate::{centered_rect, token};
 use crate::{ui, HOST};
 use color_eyre::eyre::format_err;
@@ -26,8 +26,14 @@ pub struct Login {
     error_message: Option<String>, // 添加错误消息字段
 }
 
+enum CurrentMode {
+    Normal,
+    Editing,
+    Alerting,
+}
+
 impl Login {
-    pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|f| self.draw(f))?;
             if let Event::Key(key) = event::read()? {
@@ -40,10 +46,10 @@ impl Login {
                             return Ok(());
                         }
                         KeyCode::Enter => {
-                            match login(self) {
+                            match login(&self) {
                                 Ok(_) => {
                                     // 登陆后进入最近聊天页面
-                                    let mut recent_chat = RecentChat::new();
+                                    let mut recent_chat = RecentChat::new()?;
                                     recent_chat.run(&mut terminal)?;
                                 }
                                 Err(err) => {
@@ -245,8 +251,8 @@ impl Login {
     }
 }
 
-fn login(login: &mut Login) -> Result<()> {
-    match do_login(&login) {
+fn login(login: &Login) -> Result<()> {
+    match do_login(login) {
         Ok(token) => {
             let user = token::parse_token(token.as_str()).unwrap().claims;
             {
@@ -263,7 +269,7 @@ fn login(login: &mut Login) -> Result<()> {
     }
 }
 
-fn do_login(login: &&mut Login) -> Result<String> {
+fn do_login(login: &Login) -> Result<String> {
     let login_url = format!("{HOST}/token/login");
     let client = Client::new();
     let response = client

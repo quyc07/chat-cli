@@ -34,22 +34,16 @@ pub struct Input {
     /// Position of cursor in the editor area.
     pub(crate) character_index: usize,
     /// Current input mode
-    pub(crate) current_mode: CurrentMode,
+    // pub(crate) current_mode: CurrentMode,
     /// History of recorded messages
     pub(crate) messages: Vec<String>,
-}
-
-pub(crate) enum CurrentMode {
-    Normal,
-    Editing,
-    Alerting,
 }
 
 impl Input {
     pub(crate) const fn new() -> Self {
         Self {
             input: String::new(),
-            current_mode: CurrentMode::Normal,
+            // current_mode: CurrentMode::Normal,
             messages: Vec::new(),
             character_index: 0,
         }

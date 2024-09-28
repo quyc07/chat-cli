@@ -1,9 +1,12 @@
 mod login;
 mod user_input;
 mod token;
-mod recent_chat;
+mod home;
 mod ui;
 mod datetime;
+mod recent_chat;
+mod contacts;
+mod me;
 
 use crate::login::Login;
 use color_eyre::owo_colors::OwoColorize;
