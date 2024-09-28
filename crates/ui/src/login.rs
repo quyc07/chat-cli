@@ -42,7 +42,7 @@ impl Login {
                 }
                 match self.current_mode {
                     CurrentMode::Normal => match key.code {
-                        KeyCode::Char('q') => {
+                        KeyCode::Char('q') | KeyCode::Esc => {
                             return Ok(());
                         }
                         KeyCode::Enter => {
@@ -75,7 +75,7 @@ impl Login {
                                     KeyCode::Left => self.username.move_cursor_left(),
                                     KeyCode::Right => self.username.move_cursor_right(),
                                     KeyCode::Esc => self.current_mode = CurrentMode::Normal,
-                                    KeyCode::Enter => {
+                                    KeyCode::Tab => {
                                         self.toggle_editing();
                                     }
                                     _ => {}

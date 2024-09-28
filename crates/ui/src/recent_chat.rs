@@ -148,15 +148,16 @@ impl RecentChat {
 
     fn render_chat(&self, area: Rect, buf: &mut Buffer) {
         // We get the info depending on the item's state.
-        let info = if let Some(i) = self.chat_list.state.selected() {
-            Line::from(&self.chat_list.items[i])
+        let (info, title) = if let Some(i) = self.chat_list.state.selected() {
+            let chat_vo = &self.chat_list.items[i];
+            (Line::from(chat_vo), format!("Chat with {}", chat_vo.get_name()))
         } else {
-            Line::from("Nothing selected...".to_string())
+            (Line::from("Nothing selected...".to_string()), "No chat selected".to_string())
         };
 
         // We show the list item's info under the list in this paragraph
         let block = Block::new()
-            .title(Line::raw("TODO Info").centered())
+            .title(Line::raw(title).centered())
             .borders(Borders::LEFT | Borders::TOP)
             .border_set(symbols::border::EMPTY)
             .border_style(TODO_HEADER_STYLE)
@@ -264,6 +265,15 @@ enum ChatVo {
         /// unread message count
         unread: Option<String>,
     },
+}
+
+impl ChatVo {
+    fn get_name(&self) -> String {
+        match self {
+            ChatVo::User { user_name, .. } => user_name.clone(),
+            ChatVo::Group { user_name, .. } => user_name.clone(),
+        }
+    }
 }
 
 impl From<&ChatVo> for Line<'_> {
