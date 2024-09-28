@@ -49,6 +49,7 @@ impl Login {
                             match login(&self) {
                                 Ok(_) => {
                                     // 登陆后进入最近聊天页面
+                                    // TODO home页面修改为tab 支持切换manu
                                     let mut recent_chat = RecentChat::new()?;
                                     recent_chat.run(&mut terminal)?;
                                 }

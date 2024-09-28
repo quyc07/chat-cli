@@ -133,6 +133,7 @@ impl RecentChat {
             })
             .collect();
 
+        // TODO 需要支持自动换行 wrap
         // Create a List from all list items and highlight the currently selected one
         let list = List::new(items)
             .block(block)
@@ -277,6 +278,7 @@ impl From<&ChatVo> for Line<'_> {
                 ..
             } => {
                 let mut content = vec![
+                    // FIXME 换行不生效
                     Span::styled(format!("好友: {}\n", user_name), Style::default().fg(Color::LightBlue)),
                     Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue)),
                     Span::styled(format!("{}\n", msg), Style::default().fg(Color::White)),
