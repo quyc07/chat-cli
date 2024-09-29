@@ -72,3 +72,20 @@ fn sub_rect(x: u16, width: u16, y: u16, high: u16, r: Rect) -> Rect {
         ])
         .split(popup_layout[1])[1] // Return the middle chunk
 }
+
+#[cfg(test)]
+mod test{
+    use unicode_width::UnicodeWidthStr;
+
+    #[test]
+    fn test_sub_rect(){
+        let string = format!("{:width$}", "你", width = 20);
+        let string1 = format!("{:width$}", "hello", width = 20);
+        let string2 = format!("{:width$}", "hello world", width = 20);
+
+        println!("{}", "你".width());
+        println!("{}", string.len());
+        println!("{}", string1.len());
+        println!("{}", string2.len());
+    }
+}

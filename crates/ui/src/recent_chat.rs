@@ -14,9 +14,10 @@ use ratatui::style::palette::material::{BLUE, GREEN};
 use ratatui::style::palette::tailwind::SLATE;
 use ratatui::style::{Modifier, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Padding, Paragraph, StatefulWidget, Widget, Wrap};
+use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Padding, Paragraph, StatefulWidget, Widget};
 use ratatui::{symbols, DefaultTerminal};
 use reqwest::blocking::Client;
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -29,10 +30,27 @@ const TEXT_FG_COLOR: Color = SLATE.c200;
 const COMPLETED_TEXT_FG_COLOR: Color = GREEN.c500;
 
 pub(crate) struct RecentChat {
-    error_message: Option<String>, // 添加错误消息字段
+    error_message: Option<String>,
     should_exit: bool,
     chat_list: ChatList,
+    selected_chat_history: Option<SelectedChatHistory>,
 }
+
+enum SelectedChatHistory {
+    User {
+        uid: i32,
+        user_name: String,
+        history: Vec<UserHistoryMsg>,
+    },
+    Group {
+        gid: i32,
+        group_name: String,
+        history: Vec<GroupHistoryMsg>,
+    },
+}
+
+// TODO 群消息
+struct GroupHistoryMsg {}
 
 impl RecentChat {
     fn render_footer(area: Rect, buf: &mut Buffer) {
@@ -43,7 +61,7 @@ impl RecentChat {
 }
 
 struct ChatList {
-    items: Arc<Mutex<Vec<ChatVo>>>, // TODO 需要异步刷新来获取最新消息
+    items: Arc<Mutex<Vec<ChatVo>>>,
     state: ListState,
 }
 
@@ -58,6 +76,7 @@ impl RecentChat {
             error_message: None,
             should_exit: false,
             chat_list,
+            selected_chat_history: None,
         };
         chat.start_update_thread();
         Ok(chat)
@@ -89,36 +108,79 @@ impl RecentChat {
                 frame.render_widget(&mut self, rect)
             })?;
             if let Event::Key(key) = event::read()? {
-                self.handle_key(key);
+                self.handle_key(key)?
             };
         }
         Ok(())
     }
 
-    fn handle_key(&mut self, key: event::KeyEvent) {
+    fn handle_key(&mut self, key: event::KeyEvent) -> Result<()> {
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.should_exit = true,
+            KeyCode::Char('q') | KeyCode::Esc => Ok(self.should_exit = true),
             KeyCode::Down => self.select_next(),
             KeyCode::Up => self.select_previous(),
             KeyCode::Char('g') | KeyCode::Home => self.select_first(),
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
             KeyCode::Right | KeyCode::Enter => {
-                self.to_chat();
+                Ok(self.to_chat())
             }
-            _ => {}
+            _ => Ok(())
         }
     }
-    fn select_next(&mut self) {
-        self.chat_list.state.select_next()
+    fn select_next(&mut self) -> Result<()> {
+        self.chat_list.state.select_next();
+        if let Some(i) = self.chat_list.state.selected() {
+            self.do_fetch_history(i)
+        } else {
+            Ok(())
+        }
     }
-    fn select_previous(&mut self) {
-        self.chat_list.state.select_previous()
+
+    fn do_fetch_history(&mut self, i: usize) -> Result<()> {
+        let chat_vo = &self.chat_list.items.lock().unwrap()[i];
+        match chat_vo {
+            ChatVo::User { uid, user_name, .. } => {
+                match fetch_history(Friend { id: *uid, name: user_name.clone() }) {
+                    Ok(chat_history) => {
+                        self.selected_chat_history = Some(SelectedChatHistory::User {
+                            uid: *uid,
+                            user_name: user_name.clone(),
+                            history: chat_history,
+                        });
+                        Ok(())
+                    }
+                    Err(err) => Err(format_err!("Failed to fetch chat history:{}",err)),
+                }
+            }
+            ChatVo::Group { .. } => {
+                todo!()
+            }
+        }
     }
-    fn select_first(&mut self) {
-        self.chat_list.state.select_first()
+
+    fn select_previous(&mut self) -> Result<()> {
+        self.chat_list.state.select_previous();
+        if let Some(i) = self.chat_list.state.selected() {
+            self.do_fetch_history(i)
+        } else {
+            Ok(())
+        }
     }
-    fn select_last(&mut self) {
-        self.chat_list.state.select_last()
+    fn select_first(&mut self) -> Result<()> {
+        self.chat_list.state.select_first();
+        if let Some(i) = self.chat_list.state.selected() {
+            self.do_fetch_history(i)
+        } else {
+            Ok(())
+        }
+    }
+    fn select_last(&mut self) -> Result<()> {
+        self.chat_list.state.select_last();
+        if let Some(i) = self.chat_list.state.selected() {
+            self.do_fetch_history(i)
+        } else {
+            Ok(())
+        }
     }
     fn to_chat(&self) {
         let index = self.chat_list.state.selected();
@@ -171,15 +233,32 @@ impl RecentChat {
     }
 
     fn render_chat(&self, area: Rect, buf: &mut Buffer) {
-        // We get the info depending on the item's state.
-        let (info, title) = if let Some(i) = self.chat_list.state.selected() {
-            let chat_vo = &self.chat_list.items.lock().unwrap()[i];
-            (Text::from(chat_vo), format!("Chat with {}", chat_vo.get_name()))
-        } else {
-            (Text::from("Nothing selected...".to_string()), "No chat selected".to_string())
+        let (items, title) = match &self.selected_chat_history {
+            Some(SelectedChatHistory::User { uid, user_name, history }) => {
+                let vec: Vec<ListItem> = history
+                    .iter()
+                    .enumerate()
+                    .map(|(i, chat)| {
+                        let color = alternate_colors(i);
+                        let content = vec![
+                            Line::from(vec![
+                                Span::styled(if *uid == chat.from_uid { format!("{:width$}", "你", width = 49) } else { format!("{:width$}", user_name, width = 50) }, Style::default().fg(Color::LightBlue)),
+                                Span::styled(format!("{}", chat.time), Style::default().fg(Color::Gray)),
+                            ]),
+                            Line::from(Span::styled(format!("{}", chat.msg), Style::default().fg(Color::White))),
+                        ];
+                        ListItem::new(Text::from(content)).bg(color)
+                    })
+                    .collect();
+                (vec, format!("与{}的聊天记录", user_name))
+            }
+            Some(SelectedChatHistory::Group { .. }) => {
+                todo!()
+            }
+            None => {
+                return;
+            }
         };
-
-        // We show the list item's info under the list in this paragraph
         let block = Block::new()
             .title(Line::raw(title).centered())
             .borders(Borders::LEFT | Borders::TOP)
@@ -188,12 +267,13 @@ impl RecentChat {
             .bg(NORMAL_ROW_BG)
             .padding(Padding::horizontal(1));
 
-        // We can now render the item info
-        Paragraph::new(info)
+        let list = List::new(items)
             .block(block)
-            .fg(TEXT_FG_COLOR)
-            .wrap(Wrap { trim: false })
-            .render(area, buf);
+            .highlight_style(SELECTED_STYLE)
+            .highlight_symbol(">")
+            .highlight_spacing(HighlightSpacing::Always);
+
+        Widget::render(list, area, buf);
     }
 }
 
@@ -312,7 +392,6 @@ impl From<&ChatVo> for Text<'_> {
                 ..
             } => {
                 let mut content = vec![
-                    // FIXME 换行不生效
                     Line::from(Span::styled(format!("好友: {}\n", user_name), Style::default().fg(Color::LightBlue))),
                     Line::from(Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue))),
                     Line::from(Span::styled(format!("{}\n", msg), Style::default().fg(Color::White))),
@@ -343,4 +422,50 @@ impl From<&ChatVo> for Text<'_> {
             }
         }
     }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct Friend {
+    pub(crate) id: i32,
+    pub(crate) name: String,
+}
+
+fn fetch_history(friend: Friend) -> Result<Vec<UserHistoryMsg>> {
+    let url = format!("{HOST}/user/{}/history", friend.id);
+    let token = CURRENT_USER.lock().unwrap().token.clone().unwrap();
+    let res = Client::new()
+        .get(url)
+        .header(
+            "Authorization",
+            format!("Bearer {token}"),
+        )
+        .send();
+    match res {
+        Ok(res) => match res.status() {
+            StatusCode::OK => {
+                let res = res.json::<Vec<UserHistoryMsg>>();
+                res.or_else(|e| Err(format_err!("Failed to get chat history :{}",e)))
+            }
+            _ => {
+                Err(format_err!("Failed to get chat history:{}", res.status()))
+            }
+        },
+        Err(err) => {
+            Err(format_err!("Failed to get chat history:{}", err))
+        }
+    }
+}
+
+/// 历史聊天记录
+#[derive(Deserialize, Serialize)]
+struct UserHistoryMsg {
+    /// 消息id
+    mid: i64,
+    /// 消息内容
+    msg: String,
+    /// 消息发送时间
+    #[serde(with = "datetime_format")]
+    time: DateTime<Local>,
+    /// 消息发送者id
+    from_uid: i32,
 }
