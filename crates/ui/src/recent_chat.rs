@@ -13,11 +13,13 @@ use ratatui::prelude::{Color, Style};
 use ratatui::style::palette::material::{BLUE, GREEN};
 use ratatui::style::palette::tailwind::SLATE;
 use ratatui::style::{Modifier, Stylize};
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Padding, Paragraph, StatefulWidget, Widget, Wrap};
 use ratatui::{symbols, DefaultTerminal};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 const TODO_HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
 const NORMAL_ROW_BG: Color = SLATE.c950;
@@ -41,21 +43,43 @@ impl RecentChat {
 }
 
 struct ChatList {
-    items: Vec<ChatVo>, // TODO 需要异步刷新来获取最新消息
+    items: Arc<Mutex<Vec<ChatVo>>>, // TODO 需要异步刷新来获取最新消息
     state: ListState,
 }
 
 impl RecentChat {
     pub(crate) fn new() -> Result<Self> {
         let chat_list = ChatList {
-            items: recent_chat()?,
+            items: Arc::new(Mutex::new(recent_chat()?)),
             state: ListState::default(),
         };
-        Ok(Self {
+
+        let chat = Self {
             error_message: None,
             should_exit: false,
             chat_list,
-        })
+        };
+        chat.start_update_thread();
+        Ok(chat)
+    }
+
+    fn start_update_thread(&self) {
+        let value_clone = self.chat_list.items.clone();
+        thread::spawn(move || loop {
+            // 尽快释放锁，方便数据呈现
+            {
+                let mut value = value_clone.lock().unwrap();
+                match recent_chat() {
+                    Ok(items) => {
+                        *value = items;
+                    }
+                    Err(err) => {
+                        eprintln!("Error: {}", err);
+                    }
+                }
+            }
+            thread::sleep(std::time::Duration::from_secs(5));
+        });
     }
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
@@ -100,7 +124,7 @@ impl RecentChat {
         let index = self.chat_list.state.selected();
         match index {
             Some(index) => {
-                let chat_vo = &self.chat_list.items[index];
+                let chat_vo = &self.chat_list.items.lock().unwrap()[index];
                 match chat_vo {
                     ChatVo::User { uid, .. } => {
                         // TODO: to chat with user
@@ -116,6 +140,7 @@ impl RecentChat {
 
     fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
         let block = Block::new()
+            .title(Line::raw("Recent Chat").centered())
             .borders(Borders::TOP)
             .border_set(symbols::border::EMPTY)
             .border_style(TODO_HEADER_STYLE)
@@ -124,16 +149,15 @@ impl RecentChat {
         // Iterate through all elements in the `items` and stylize them.
         let items: Vec<ListItem> = self
             .chat_list
-            .items
+            .items.lock().unwrap()
             .iter()
             .enumerate()
             .map(|(i, chat_vo)| {
                 let color = alternate_colors(i);
-                ListItem::new(Line::from(chat_vo)).bg(color)
+                ListItem::new(Text::from(chat_vo)).bg(color)
             })
             .collect();
 
-        // TODO 需要支持自动换行 wrap
         // Create a List from all list items and highlight the currently selected one
         let list = List::new(items)
             .block(block)
@@ -149,10 +173,10 @@ impl RecentChat {
     fn render_chat(&self, area: Rect, buf: &mut Buffer) {
         // We get the info depending on the item's state.
         let (info, title) = if let Some(i) = self.chat_list.state.selected() {
-            let chat_vo = &self.chat_list.items[i];
-            (Line::from(chat_vo), format!("Chat with {}", chat_vo.get_name()))
+            let chat_vo = &self.chat_list.items.lock().unwrap()[i];
+            (Text::from(chat_vo), format!("Chat with {}", chat_vo.get_name()))
         } else {
-            (Line::from("Nothing selected...".to_string()), "No chat selected".to_string())
+            (Text::from("Nothing selected...".to_string()), "No chat selected".to_string())
         };
 
         // We show the list item's info under the list in this paragraph
@@ -276,7 +300,7 @@ impl ChatVo {
     }
 }
 
-impl From<&ChatVo> for Line<'_> {
+impl From<&ChatVo> for Text<'_> {
     fn from(value: &ChatVo) -> Self {
         match value {
             ChatVo::User {
@@ -289,14 +313,14 @@ impl From<&ChatVo> for Line<'_> {
             } => {
                 let mut content = vec![
                     // FIXME 换行不生效
-                    Span::styled(format!("好友: {}\n", user_name), Style::default().fg(Color::LightBlue)),
-                    Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue)),
-                    Span::styled(format!("{}\n", msg), Style::default().fg(Color::White)),
+                    Line::from(Span::styled(format!("好友: {}\n", user_name), Style::default().fg(Color::LightBlue))),
+                    Line::from(Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue))),
+                    Line::from(Span::styled(format!("{}\n", msg), Style::default().fg(Color::White))),
                 ];
                 if let Some(unread) = unread {
-                    content.push(Span::styled(format!("未读: {}\n", unread), Style::default().fg(Color::LightBlue)))
+                    content.push(Line::from(Span::styled(format!("未读: {}\n", unread), Style::default().fg(Color::LightBlue))))
                 }
-                Line::from(content)
+                Self::from(content)
             }
             ChatVo::Group {
                 gid: _gid,
@@ -308,14 +332,14 @@ impl From<&ChatVo> for Line<'_> {
                 ..
             } => {
                 let mut content = vec![
-                    Span::styled(format!("群: {}\n", group_name), Style::default().fg(Color::LightBlue)),
-                    Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue)),
-                    Span::styled(format!("{}: {}\n", user_name, msg), Style::default().fg(Color::White)),
+                    Line::from(Span::styled(format!("群: {}\n", group_name), Style::default().fg(Color::LightBlue))),
+                    Line::from(Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue))),
+                    Line::from(Span::styled(format!("{}: {}\n", user_name, msg), Style::default().fg(Color::White))),
                 ];
                 if let Some(unread) = unread {
-                    content.push(Span::styled(format!("未读: {}\n", unread), Style::default().fg(Color::LightBlue)))
+                    content.push(Line::from(Span::styled(format!("未读: {}\n", unread), Style::default().fg(Color::LightBlue))))
                 }
-                Line::from(content)
+                Self::from(content)
             }
         }
     }
