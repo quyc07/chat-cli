@@ -99,7 +99,7 @@ async fn set_read_index(ri: UpdateReadIndex) {
             "Authorization",
             format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
         )
-        .body(serde_json::to_string(&ri).unwrap())
+        .json(&ri)
         .send()
         .await.expect("unable to set read index");
 }
@@ -181,12 +181,11 @@ async fn chat(friend: &Friend) {
                     let url = format!("{HOST}/user/{}/send", friend.id);
                     let res = client
                         .post(&url)
-                        .header("Content-Type", "application/json")
                         .header(
                             "Authorization",
                             format!("Bearer {}", CURRENT_USER.lock().unwrap().token),
                         )
-                        .body(serde_json::json!({
+                        .json(&serde_json::json!({
                             "msg": replace_whitespace(&input),
                         }).to_string())
                         .send()

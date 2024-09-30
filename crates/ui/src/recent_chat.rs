@@ -49,9 +49,6 @@ enum SelectedChatHistory {
     },
 }
 
-// TODO 群消息
-struct GroupHistoryMsg {}
-
 impl RecentChat {
     fn render_footer(area: Rect, buf: &mut Buffer) {
         Paragraph::new("Use ↓↑ to move, →/Enter to change status, g/G or Home/End to go top/bottom.")
@@ -121,51 +118,62 @@ impl RecentChat {
             KeyCode::Up => self.select_previous(),
             KeyCode::Char('g') | KeyCode::Home => self.select_first(),
             KeyCode::Char('G') | KeyCode::End => self.select_last(),
-            KeyCode::Right | KeyCode::Enter => {
-                Ok(self.to_chat())
-            }
             _ => Ok(())
         }
     }
     fn select_next(&mut self) -> Result<()> {
         self.chat_list.state.select_next();
-        self.fetch_history()
+        self.fetch_history_and_update_read_index()
     }
 
     fn select_previous(&mut self) -> Result<()> {
         self.chat_list.state.select_previous();
-        self.fetch_history()
+        self.fetch_history_and_update_read_index()
     }
     fn select_first(&mut self) -> Result<()> {
         self.chat_list.state.select_first();
-        self.fetch_history()
+        self.fetch_history_and_update_read_index()
     }
     fn select_last(&mut self) -> Result<()> {
         self.chat_list.state.select_last();
-        self.fetch_history()
+        self.fetch_history_and_update_read_index()
     }
 
-    fn fetch_history(&mut self) -> Result<()> {
+    fn fetch_history_and_update_read_index(&mut self) -> Result<()> {
         let chat_list = self.chat_list.items.lock().unwrap();
         match self.chat_list.state.selected() {
             Some(i) if i < chat_list.len() => {
                 let chat_vo = &chat_list[i];
                 match chat_vo {
                     ChatVo::User { uid, user_name, .. } => {
-                        match fetch_history(Friend { id: *uid, name: user_name.clone() }) {
+                        match fetch_user_history(*uid) {
                             Ok(chat_history) => {
+                                let last_mid = chat_history.last().unwrap().mid;
                                 self.selected_chat_history = Some(SelectedChatHistory::User {
                                     uid: *uid,
                                     user_name: user_name.clone(),
                                     history: chat_history,
                                 });
-                                Ok(())
+                                // 更新 已读索引
+                                set_read_index(UpdateReadIndex::User { target_uid: *uid, mid: last_mid })
                             }
                             Err(err) => Err(format_err!("Failed to fetch chat history:{}",err)),
                         }
                     }
-                    ChatVo::Group { .. } => {
-                        todo!()
+                    ChatVo::Group { gid, group_name, .. } => {
+                        match fetch_group_history(*gid) {
+                            Ok(chat_history) => {
+                                let last_mid = chat_history.last().unwrap().mid;
+                                self.selected_chat_history = Some(SelectedChatHistory::Group {
+                                    gid: *gid,
+                                    group_name: group_name.clone(),
+                                    history: chat_history,
+                                });
+                                // 更新 已读索引
+                                set_read_index(UpdateReadIndex::Group { target_gid: *gid, mid: last_mid })
+                            }
+                            Err(err) => Err(format_err!("Failed to fetch chat history:{}",err))
+                        }
                     }
                 }
             }
@@ -243,8 +251,24 @@ impl RecentChat {
                     .collect();
                 (vec, format!("与{}的聊天记录", user_name))
             }
-            Some(SelectedChatHistory::Group { .. }) => {
-                todo!()
+            Some(SelectedChatHistory::Group { gid, group_name, history }) => {
+                let vec: Vec<ListItem> = history
+                    .iter()
+                    .enumerate()
+                    .map(|(i, chat)| {
+                        let color = alternate_colors(i);
+                        let uid = CURRENT_USER.lock().unwrap().user.clone().unwrap().id;
+                        let content = vec![
+                            Line::from(vec![
+                                Span::styled(if uid == chat.from_uid { format!("{:width$}", "你", width = 49) } else { format!("{:width$}", chat.name_of_from_uid, width = 50) }, Style::default().fg(Color::LightBlue)),
+                                Span::styled(format!("{}", chat.time), Style::default().fg(Color::Gray)),
+                            ]),
+                            Line::from(Span::styled(format!("{}", chat.msg), Style::default().fg(Color::White))),
+                        ];
+                        ListItem::new(Text::from(content)).bg(color)
+                    })
+                    .collect();
+                (vec, format!("{group_name}"))
             }
             None => {
                 return;
@@ -415,14 +439,8 @@ impl From<&ChatVo> for Text<'_> {
     }
 }
 
-#[derive(Deserialize)]
-pub(crate) struct Friend {
-    pub(crate) id: i32,
-    pub(crate) name: String,
-}
-
-fn fetch_history(friend: Friend) -> Result<Vec<UserHistoryMsg>> {
-    let url = format!("{HOST}/user/{}/history", friend.id);
+fn fetch_user_history(target_uid: i32) -> Result<Vec<UserHistoryMsg>> {
+    let url = format!("{HOST}/user/{target_uid}/history");
     let token = CURRENT_USER.lock().unwrap().token.clone().unwrap();
     let res = Client::new()
         .get(url)
@@ -459,4 +477,65 @@ struct UserHistoryMsg {
     time: DateTime<Local>,
     /// 消息发送者id
     from_uid: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GroupHistoryMsg {
+    pub mid: i64,
+    pub msg: String,
+    #[serde(with = "datetime_format")]
+    pub time: DateTime<Local>,
+    pub from_uid: i32,
+    pub name_of_from_uid: String,
+}
+
+fn fetch_group_history(gid: i32) -> Result<Vec<GroupHistoryMsg>> {
+    let url = format!("{HOST}/group/{gid}/history");
+    let token = CURRENT_USER.lock().unwrap().token.clone().unwrap();
+    let res = Client::new()
+        .get(url)
+        .header(
+            "Authorization",
+            format!("Bearer {token}"),
+        )
+        .send();
+    match res {
+        Ok(res) => match res.status() {
+            StatusCode::OK => {
+                let res = res.json::<Vec<GroupHistoryMsg>>();
+                res.or_else(|e| Err(format_err!("Failed to get chat history :{}",e)))
+            }
+            _ => {
+                Err(format_err!("Failed to get chat history:{}", res.status()))
+            }
+        },
+        Err(err) => {
+            Err(format_err!("Failed to get chat history:{}", err))
+        }
+    }
+}
+
+#[derive(Serialize)]
+enum UpdateReadIndex {
+    User { target_uid: i32, mid: i64 },
+    Group { target_gid: i32, mid: i64 },
+}
+
+fn set_read_index(ri: UpdateReadIndex) -> Result<()> {
+    let token = CURRENT_USER.lock().unwrap().token.clone().unwrap();
+    let res = Client::new()
+        .put(format!("{HOST}/ri"))
+        .header(
+            "Authorization",
+            format!("Bearer {token}"),
+        )
+        .json(&ri)
+        .send();
+    match res {
+        Ok(res) => {
+            println!("{}", res.text().unwrap());
+            Ok(())
+        }
+        Err(err) => Err(format_err!("Failed to set read index:{}", err))
+    }
 }
