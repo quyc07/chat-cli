@@ -9,7 +9,7 @@ use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
 use ratatui::prelude::{Color, Line, Modifier, Style, Stylize, Text};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
@@ -234,7 +234,8 @@ impl Login {
         if let Some(message) = &self.error_message {
             let error_paragraph = Paragraph::new(message.as_str())
                 .style(Style::default().fg(Color::Red))
-                .block(Block::default().title("Error | Esc to close this msg").borders(Borders::ALL));
+                .block(Block::default().title("Error | Esc to close this msg").borders(Borders::ALL))
+                .wrap(Wrap { trim: true });
             frame.render_widget(error_paragraph, error_area); // 选择合适的区域
             self.current_mode = CurrentMode::Alerting;
         }

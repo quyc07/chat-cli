@@ -9,7 +9,7 @@ use crossterm::event;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
 
 #[derive(Eq, PartialEq, Clone)]
@@ -22,7 +22,7 @@ enum Menu {
 pub struct Home {
     selected_menu: Menu,
     error_message: Option<String>,
-    current_mode: CurrentMode
+    current_mode: CurrentMode,
 }
 
 pub(crate) enum CurrentMode {
@@ -34,7 +34,6 @@ impl Home {
     pub(crate) fn new() -> Self {
         Self { selected_menu: Menu::RecentChat, error_message: None, current_mode: CurrentMode::Normal }
     }
-    // TODO 最近聊天页面
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         loop {
             terminal.draw(|f| self.draw(f))?;
@@ -121,13 +120,14 @@ impl Home {
             }
         }
         self.menu_render(frame, manu_area);
-        
+
         let error_area = Rect::new(area.width * 2 / 10, (area.height - 2) / 2, area.width * 6 / 10, 3); // 新增代码
         // 绘制错误消息
         if let Some(message) = &self.error_message {
             let error_paragraph = Paragraph::new(message.as_str())
                 .style(Style::default().fg(Color::Red))
-                .block(Block::default().title("Error | Esc to close this msg").borders(Borders::ALL));
+                .block(Block::default().title("Error | Esc to close this msg").borders(Borders::ALL))
+                .wrap(Wrap { trim: true });
             frame.render_widget(error_paragraph, error_area); // 选择合适的区域
             self.current_mode = CurrentMode::Alerting;
         }

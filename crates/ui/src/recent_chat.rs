@@ -129,59 +129,50 @@ impl RecentChat {
     }
     fn select_next(&mut self) -> Result<()> {
         self.chat_list.state.select_next();
-        if let Some(i) = self.chat_list.state.selected() {
-            self.do_fetch_history(i)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn do_fetch_history(&mut self, i: usize) -> Result<()> {
-        let chat_vo = &self.chat_list.items.lock().unwrap()[i];
-        match chat_vo {
-            ChatVo::User { uid, user_name, .. } => {
-                match fetch_history(Friend { id: *uid, name: user_name.clone() }) {
-                    Ok(chat_history) => {
-                        self.selected_chat_history = Some(SelectedChatHistory::User {
-                            uid: *uid,
-                            user_name: user_name.clone(),
-                            history: chat_history,
-                        });
-                        Ok(())
-                    }
-                    Err(err) => Err(format_err!("Failed to fetch chat history:{}",err)),
-                }
-            }
-            ChatVo::Group { .. } => {
-                todo!()
-            }
-        }
+        self.fetch_history()
     }
 
     fn select_previous(&mut self) -> Result<()> {
         self.chat_list.state.select_previous();
-        if let Some(i) = self.chat_list.state.selected() {
-            self.do_fetch_history(i)
-        } else {
-            Ok(())
-        }
+        self.fetch_history()
     }
     fn select_first(&mut self) -> Result<()> {
         self.chat_list.state.select_first();
-        if let Some(i) = self.chat_list.state.selected() {
-            self.do_fetch_history(i)
-        } else {
-            Ok(())
-        }
+        self.fetch_history()
     }
     fn select_last(&mut self) -> Result<()> {
         self.chat_list.state.select_last();
-        if let Some(i) = self.chat_list.state.selected() {
-            self.do_fetch_history(i)
-        } else {
-            Ok(())
+        self.fetch_history()
+    }
+
+    fn fetch_history(&mut self) -> Result<()> {
+        let chat_list = self.chat_list.items.lock().unwrap();
+        match self.chat_list.state.selected() {
+            Some(i) if i < chat_list.len() => {
+                let chat_vo = &chat_list[i];
+                match chat_vo {
+                    ChatVo::User { uid, user_name, .. } => {
+                        match fetch_history(Friend { id: *uid, name: user_name.clone() }) {
+                            Ok(chat_history) => {
+                                self.selected_chat_history = Some(SelectedChatHistory::User {
+                                    uid: *uid,
+                                    user_name: user_name.clone(),
+                                    history: chat_history,
+                                });
+                                Ok(())
+                            }
+                            Err(err) => Err(format_err!("Failed to fetch chat history:{}",err)),
+                        }
+                    }
+                    ChatVo::Group { .. } => {
+                        todo!()
+                    }
+                }
+            }
+            _ => Ok(())
         }
     }
+
     fn to_chat(&self) {
         let index = self.chat_list.state.selected();
         match index {
