@@ -14,7 +14,7 @@ use ratatui::style::palette::material::{BLUE, GREEN};
 use ratatui::style::palette::tailwind::SLATE;
 use ratatui::style::{Modifier, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Padding, Paragraph, StatefulWidget, Widget};
+use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Widget};
 use ratatui::{symbols, DefaultTerminal};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
@@ -100,6 +100,7 @@ impl RecentChat {
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.should_exit {
+            terminal.clear()?;
             terminal.draw(|frame| {
                 let rect = total_area(frame);
                 frame.render_widget(&mut self, rect)
@@ -181,29 +182,11 @@ impl RecentChat {
         }
     }
 
-    fn to_chat(&self) {
-        let index = self.chat_list.state.selected();
-        match index {
-            Some(index) => {
-                let chat_vo = &self.chat_list.items.lock().unwrap()[index];
-                match chat_vo {
-                    ChatVo::User { uid, .. } => {
-                        // TODO: to chat with user
-                    }
-                    ChatVo::Group { gid, .. } => {
-                        // TODO: to chat with group
-                    }
-                }
-            }
-            None => {}
-        }
-    }
-
     fn render_list(&mut self, area: Rect, buf: &mut Buffer) {
         let block = Block::new()
             .title(Line::raw("Recent Chat").centered())
-            .borders(Borders::TOP)
-            .border_set(symbols::border::EMPTY)
+            .borders(Borders::ALL)
+            .border_set(symbols::border::ROUNDED)
             .border_style(TODO_HEADER_STYLE)
             .bg(NORMAL_ROW_BG);
 
@@ -276,17 +259,13 @@ impl RecentChat {
         };
         let block = Block::new()
             .title(Line::raw(title).centered())
-            .borders(Borders::LEFT | Borders::TOP)
-            .border_set(symbols::border::EMPTY)
+            .borders(Borders::ALL)
+            .border_set(symbols::border::ROUNDED)
             .border_style(TODO_HEADER_STYLE)
-            .bg(NORMAL_ROW_BG)
-            .padding(Padding::horizontal(1));
+            .bg(NORMAL_ROW_BG);
 
         let list = List::new(items)
-            .block(block)
-            .highlight_style(SELECTED_STYLE)
-            .highlight_symbol(">")
-            .highlight_spacing(HighlightSpacing::Always);
+            .block(block);
 
         Widget::render(list, area, buf);
     }
@@ -312,10 +291,13 @@ impl Widget for &mut RecentChat {
             .areas(area);
 
         RecentChat::render_footer(footer_area, buf);
-
+        
         if self.chat_list.state.selected().is_some() {
-            let [list_area, chat_area] =
-                Layout::horizontal([Constraint::Fill(1), Constraint::Fill(2)]).areas(main_area);
+            let [list_area, chat_area] = Layout::horizontal([
+                Constraint::Fill(1),
+                Constraint::Fill(2),
+            ])
+                .areas(main_area);
             self.render_list(list_area, buf);
             self.render_chat(chat_area, buf);
         } else {
