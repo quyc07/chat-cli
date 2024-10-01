@@ -11,7 +11,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::{Color, Style};
 use ratatui::style::palette::material::{BLUE, GREEN};
-use ratatui::style::palette::tailwind::SLATE;
+use ratatui::style::palette::tailwind::{SLATE, TEAL};
 use ratatui::style::{Modifier, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Widget};
@@ -23,10 +23,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 const TODO_HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
-const NORMAL_ROW_BG: Color = SLATE.c950;
-const ALT_ROW_BG_COLOR: Color = SLATE.c900;
-const SELECTED_STYLE: Style = Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD);
-const TEXT_FG_COLOR: Color = SLATE.c200;
+const NORMAL_ROW_BG: Color = SLATE.c200;
+const ALT_ROW_BG_COLOR: Color = SLATE.c300;
+const SELECTED_STYLE: Style = Style::new().bg(TEAL.c200).add_modifier(Modifier::BOLD);
+const TEXT_FG_COLOR: Color = SLATE.c600;
 const COMPLETED_TEXT_FG_COLOR: Color = GREEN.c500;
 
 pub(crate) struct RecentChat {
@@ -187,8 +187,8 @@ impl RecentChat {
             .title(Line::raw("Recent Chat").centered())
             .borders(Borders::ALL)
             .border_set(symbols::border::ROUNDED)
-            .border_style(TODO_HEADER_STYLE)
-            .bg(NORMAL_ROW_BG);
+            .border_style(TODO_HEADER_STYLE);
+            // .bg(NORMAL_ROW_BG);
 
         // Iterate through all elements in the `items` and stylize them.
         let items: Vec<ListItem> = self
@@ -227,7 +227,7 @@ impl RecentChat {
                                 Span::styled(if *uid == chat.from_uid { format!("{:width$}", "你", width = 49) } else { format!("{:width$}", user_name, width = 50) }, Style::default().fg(Color::LightBlue)),
                                 Span::styled(format!("{}", chat.time), Style::default().fg(Color::Gray)),
                             ]),
-                            Line::from(Span::styled(format!("{}", chat.msg), Style::default().fg(Color::White))),
+                            Line::from(Span::styled(format!("{}", chat.msg), Style::default().fg(TEXT_FG_COLOR))),
                         ];
                         ListItem::new(Text::from(content)).bg(color)
                     })
@@ -246,7 +246,7 @@ impl RecentChat {
                                 Span::styled(if uid == chat.from_uid { format!("{:width$}", "你", width = 49) } else { format!("{:width$}", chat.name_of_from_uid, width = 50) }, Style::default().fg(Color::LightBlue)),
                                 Span::styled(format!("{}", chat.time), Style::default().fg(Color::Gray)),
                             ]),
-                            Line::from(Span::styled(format!("{}", chat.msg), Style::default().fg(Color::White))),
+                            Line::from(Span::styled(format!("{}", chat.msg), Style::default().fg(TEXT_FG_COLOR))),
                         ];
                         ListItem::new(Text::from(content)).bg(color)
                     })
@@ -261,8 +261,8 @@ impl RecentChat {
             .title(Line::raw(title).centered())
             .borders(Borders::ALL)
             .border_set(symbols::border::ROUNDED)
-            .border_style(TODO_HEADER_STYLE)
-            .bg(NORMAL_ROW_BG);
+            .border_style(TODO_HEADER_STYLE);
+            // .bg(NORMAL_ROW_BG);
 
         let list = List::new(items)
             .block(block);
@@ -291,7 +291,7 @@ impl Widget for &mut RecentChat {
             .areas(area);
 
         RecentChat::render_footer(footer_area, buf);
-        
+
         if self.chat_list.state.selected().is_some() {
             let [list_area, chat_area] = Layout::horizontal([
                 Constraint::Fill(1),
@@ -391,7 +391,7 @@ impl From<&ChatVo> for Text<'_> {
                 let mut content = vec![
                     Line::from(Span::styled(format!("好友: {}\n", user_name), Style::default().fg(Color::LightBlue))),
                     Line::from(Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue))),
-                    Line::from(Span::styled(format!("{}\n", msg), Style::default().fg(Color::White))),
+                    Line::from(Span::styled(format!("{}\n", msg), Style::default().fg(TEXT_FG_COLOR))),
                 ];
                 if let Some(unread) = unread {
                     content.push(Line::from(Span::styled(format!("未读: {}\n", unread), Style::default().fg(Color::LightBlue))))
@@ -410,7 +410,7 @@ impl From<&ChatVo> for Text<'_> {
                 let mut content = vec![
                     Line::from(Span::styled(format!("群: {}\n", group_name), Style::default().fg(Color::LightBlue))),
                     Line::from(Span::styled(format!("时间: {}\n", msg_time), Style::default().fg(Color::LightBlue))),
-                    Line::from(Span::styled(format!("{}: {}\n", user_name, msg), Style::default().fg(Color::White))),
+                    Line::from(Span::styled(format!("{}: {}\n", user_name, msg), Style::default().fg(TEXT_FG_COLOR))),
                 ];
                 if let Some(unread) = unread {
                     content.push(Line::from(Span::styled(format!("未读: {}\n", unread), Style::default().fg(Color::LightBlue))))
