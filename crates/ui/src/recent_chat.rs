@@ -9,10 +9,8 @@ use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::prelude::{Color, Style};
-use ratatui::style::palette::material::{BLUE, GREEN};
-use ratatui::style::palette::tailwind::{SLATE, TEAL};
-use ratatui::style::{Modifier, Stylize};
+use ratatui::style::palette::tailwind::{BLUE, GREEN, SLATE, TEAL};
+use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Widget};
 use ratatui::{symbols, DefaultTerminal};
@@ -50,6 +48,13 @@ enum SelectedChatHistory {
 }
 
 impl RecentChat {
+    fn render_header(area: Rect, buf: &mut Buffer) {
+        Paragraph::new("Ratatui List Example")
+            .bold()
+            .centered()
+            .render(area, buf);
+    }
+
     fn render_footer(area: Rect, buf: &mut Buffer) {
         Paragraph::new("Use ↓↑ to move, →/Enter to change status, g/G or Home/End to go top/bottom.")
             .centered()
@@ -99,6 +104,7 @@ impl RecentChat {
     }
 
     pub fn run(mut self, terminal: &mut DefaultTerminal) -> Result<()> {
+        self.select_first()?;
         while !self.should_exit {
             terminal.clear()?;
             terminal.draw(|frame| {
@@ -188,7 +194,7 @@ impl RecentChat {
             .borders(Borders::ALL)
             .border_set(symbols::border::ROUNDED)
             .border_style(TODO_HEADER_STYLE);
-            // .bg(NORMAL_ROW_BG);
+        // .bg(NORMAL_ROW_BG);
 
         // Iterate through all elements in the `items` and stylize them.
         let items: Vec<ListItem> = self
@@ -262,7 +268,7 @@ impl RecentChat {
             .borders(Borders::ALL)
             .border_set(symbols::border::ROUNDED)
             .border_style(TODO_HEADER_STYLE);
-            // .bg(NORMAL_ROW_BG);
+        // .bg(NORMAL_ROW_BG);
 
         let list = List::new(items)
             .block(block);
@@ -284,25 +290,28 @@ impl Widget for &mut RecentChat {
     where
         Self: Sized,
     {
-        let [main_area, footer_area] = Layout::vertical([
+        let [header_area, main_area, footer_area] = Layout::vertical([
+            Constraint::Length(2),
             Constraint::Fill(1),
             Constraint::Length(1),
         ])
             .areas(area);
 
+        RecentChat::render_header(header_area, buf);
         RecentChat::render_footer(footer_area, buf);
 
-        if self.chat_list.state.selected().is_some() {
-            let [list_area, chat_area] = Layout::horizontal([
-                Constraint::Fill(1),
-                Constraint::Fill(2),
-            ])
-                .areas(main_area);
-            self.render_list(list_area, buf);
-            self.render_chat(chat_area, buf);
-        } else {
-            self.render_list(main_area, buf);
-        }
+        // if self.chat_list.state.selected().is_some() {
+        let [list_area, chat_area] = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Fill(2),
+        ])
+            .areas(main_area);
+
+        self.render_list(list_area, buf);
+        self.render_chat(chat_area, buf);
+        // } else {
+        //     self.render_list(main_area, buf);
+        // }
     }
 }
 
